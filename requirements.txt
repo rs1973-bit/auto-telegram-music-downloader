@@ -1,0 +1,7 @@
+pyrogram>=2.0.106
+TgCrypto>=1.2.5
+RapidFuzz>=3.14.3
+psutil>=7.2.2
+musicbrainzngs>=0.7.1
+litellm>=1.81.15
+ffmpeg-python>=0.2.0
