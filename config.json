@@ -1,0 +1,42 @@
+{
+    "model":{
+        "name":"", 
+        "key":""
+    },
+    "telegram": {
+        "api_id": "",
+        "api_hash": "",
+        "bot_token": "",
+        "name":"",
+        "workers":"2"
+    },
+    "monitoring": {
+        "exclude":["live", "现场", "remake", "remix"],
+        "target_channels": [
+            -1002321822091,
+            -1001356243397,
+            -1001235568157,
+            -1001277825103
+        ],
+        "allowed_extensions": [
+            ".wav",
+            ".flac",
+            ".dff",
+            ".dsf"
+        ],
+        "author": [],
+        "mail":""
+    },
+    "paths": {
+        "temp_memory": "temp",
+        "final_library": "result",
+        "log_file": "bot_running.log"
+    },
+    "audio_settings": {
+        "sample_rate": 88200,
+        "bit_depth": "s32",
+        "target_ext": "flac",
+        "convertor":"flac"
+
+    }
+}
