@@ -8,7 +8,7 @@
         "api_hash": "",
         "bot_token": "",
         "name":"",
-        "workers":"2"
+        "workers": 2
     },
     "monitoring": {
         "exclude":["live", "现场", "remake", "remix"],

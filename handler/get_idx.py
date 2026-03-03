@@ -5,8 +5,6 @@ import litellm
 from concurrent.futures import ThreadPoolExecutor
 import os
 
-
-
 with open(r'config.json', 'r') as c:
     conf = json.load(c)
 
@@ -33,31 +31,32 @@ def get_album_list(artist_name):
     for i, album in enumerate(album_groups):
         album_title = album['title']
         rg_id = album["id"]
-        
         if 'secondary-type-list' in album: continue
-        
-        try:
-            # 拿到一个 Release ID
-            rel_resp = musicbrainzngs.browse_releases(release_group=rg_id, limit=1)
-            if not rel_resp['release-list']: continue
-            rel_id = rel_resp['release-list'][0]['id']
+        for _ in range(5): # 重试5次
+            print(f'正在获取{album_title}的单曲...')
+            try:
+                # 拿到一个 Release ID
+                rel_resp = musicbrainzngs.browse_releases(release_group=rg_id, limit=1)
+                if not rel_resp['release-list']: continue
+                rel_id = rel_resp['release-list'][0]['id']
+                
+                # 拿到曲目
+                full_rel = musicbrainzngs.get_release_by_id(rel_id, includes=['recordings'])
+                
+                all_songs = []
+                for medium in full_rel['release']['medium-list']:
+                    for track in medium['track-list']:
+                        all_songs.append(track['recording']['title'])
+                result[album_title] = all_songs
+                songs[artist_name] = result
+                time.sleep(1.1)
+                break
+            except Exception as e:
+                print(f"抓取 {album_title} 失败: {e}, 准备重试...")
+                time.sleep(5)
+                continue
             
-            # 拿到曲目
-            full_rel = musicbrainzngs.get_release_by_id(rel_id, includes=['recordings'])
-            
-            all_songs = []
-            for medium in full_rel['release']['medium-list']:
-                for track in medium['track-list']:
-                    all_songs.append(track['recording']['title'])
-            result[album_title] = all_songs
-            songs[artist_name] = result
-            time.sleep(1.1) 
-            
-        except Exception as e:
-            print(f"抓取 {album_title} 失败: {e}")
-            continue
-            
-def clean_data(name, token, raw):
+def clean_data(name:str, token:str, raw:dict):
     print(f'调用{name}清洗数据...')
     command = (
         f"Convert this dictionary into standard json, "
@@ -80,8 +79,10 @@ def get_idx():
     if not os.path.exists(j):
         print(f'开始建立songs.json')
         with ThreadPoolExecutor(max_workers=4) as t:
-            for i in artists:
-                t.submit(get_album_list, i)
+            futures = [t.submit(get_album_list, i) for i in artists]
+            for future in futures:
+                future.result() 
+
         with open(j, 'w') as f:
             data = clean_data(name, key, songs)
             f.write(data)

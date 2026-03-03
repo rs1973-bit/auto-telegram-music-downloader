@@ -16,7 +16,7 @@ api_id = config_data["telegram"]["api_id"]
 api_hash = config_data["telegram"]["api_hash"]
 bot_token = config_data["telegram"]["bot_token"]
 save_path = config_data["paths"]["final_library"]
-workers = config_data["telegram"]['workers']
+max_workers = int(config_data["telegram"]['workers'])
 
 async def worker(worker_id, app_instance, q, manager):
     """
@@ -61,7 +61,7 @@ async def run_session():
     api_id=api_id, 
     api_hash=api_hash, 
     workers=16, # 这是通讯线程, 不是文件下载线程
-    max_concurrent_transmissions=workers # 这才是文件下载线程
+    max_concurrent_transmissions=max_workers # 这才是文件下载线程
     )   
 
     bot = Client(
