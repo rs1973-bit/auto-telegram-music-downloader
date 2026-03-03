@@ -7,14 +7,14 @@ from rapidfuzz import fuzz
 import os
 
 # 加载配置
-with open(r'config.json', 'r', encoding="utf-8") as c, open(rf'{os.path.join('handler', "songs.json")}', 'r', encoding="utf-8") as s:
+with open(r'config.json', 'r', encoding="utf-8") as c:
     data = json.load(c)
-    albums = json.load(s)
+   
 
 moniting = data["monitoring"]
 targets = moniting["target_channels"]
 author_list = moniting["author"]
-exclud_list = moniting["exclud"]
+exclud_list = moniting["exclude"]
 collected_ids = set()
 
 def clean_name(name):
@@ -112,6 +112,9 @@ async def find_album(account: Client, chat_id: int, album_name: str, song_list: 
 
 async def get_history_audio(account: Client, q, manager):
     """主生产者函数"""
+    with open(rf'{os.path.join('handler', "songs.json")}', 'r', encoding="utf-8") as s:
+         albums = json.load(s)
+
     await manager.can_runs.wait()
     for band in author_list:
         if band not in albums:

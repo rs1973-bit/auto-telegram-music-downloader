@@ -13,7 +13,9 @@ with open('config.json', 'r') as f:
 temp_path = conf["paths"]["temp_memory"]
 save_root = conf["paths"]["final_library"]
 tar_ext = conf["audio_settings"]["target_ext"]
-workers = conf["telegram"]['workers']
+workers = int(conf["telegram"]['workers'])
+if not os.path.exists(temp_path): os.mkdir(temp_path)
+if not os.path.exists(save_root): os.mkdir(save_root)
 
 # --- 并发控制 ---
 album_semaphore = asyncio.Semaphore(1)
