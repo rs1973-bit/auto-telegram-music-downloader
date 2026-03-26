@@ -10,13 +10,15 @@ class Get_Cover:
     def __init__(self):
         self.itunes:str = "https://itunes.apple.com/search?"
         self.AudiodB:str = "https://www.theaudiodb.com/api/v1/json/123/searchalbum.php?"
-        self.ua:str = None
+        self.ua:str = UserAgent.random()
 
-    def get_ua(self):
-        self.ua = UserAgent.random()
-
-    async def request_api(self, func:function, *arg, **kwargs):
+    async def get_cover(album:AlbumTask) -> bytes:
         pass
+
+
+    
+
+    
 
 
 
