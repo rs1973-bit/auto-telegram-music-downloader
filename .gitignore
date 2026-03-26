@@ -5,6 +5,7 @@ result/
 temp/
 **/__pycache__/
 .venv/
+tests/
 
 
 
