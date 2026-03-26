@@ -2,17 +2,7 @@ import os
 import json
 import ffmpeg
 from concurrent.futures import ThreadPoolExecutor
-
-# 加载配置
-with open("config.json", 'r', encoding='utf-8') as f:
-    conf = json.load(f)
-
-
-sample_rate = str(conf["audio_settings"]["sample_rate"])
-bit_depth = conf["audio_settings"]["bit_depth"]
-target_ext = conf["audio_settings"]["target_ext"]
-temp_path = conf["paths"]["temp_memory"]
-conv = conf["audio_settings"]["convertor"]
+from manage.setup import cfg
 
 def to_tar_ext(source_path: str, tar_path: str, signal_path: str):
     print(f">>> 正在转码: {os.path.basename(source_path)}")
@@ -21,9 +11,9 @@ def to_tar_ext(source_path: str, tar_path: str, signal_path: str):
          .input(source_path)
          .output(
              tar_path,
-             acodec=conv,
-             ar=sample_rate,
-             sample_fmt=bit_depth
+             acodec=cfg.conv,
+             ar=cfg.sample_rate,
+             sample_fmt=cfg.bit_depth
          )
          .overwrite_output()
          .run(capture_stdout=True, capture_stderr=True))
@@ -44,10 +34,10 @@ def converter():
     """
     扫描并匹配任务
     """
-    if not os.path.exists(temp_path):
+    if not os.path.exists(cfg.temp_path):
         return
 
-    all_files = os.listdir(temp_path)
+    all_files = os.listdir(cfg.temp_path)
     
     audio_extensions = ('.dsf', '.dff', '.wav', '.m4a')
     audio_files = [f for f in all_files if f.lower().endswith(audio_extensions)]
@@ -57,10 +47,10 @@ def converter():
 
     with ThreadPoolExecutor(max_workers=1) as t:
         for audio_name in audio_files:
-            source_full_path = os.path.join(temp_path, audio_name)
+            source_full_path = os.path.join(cfg.temp_path, audio_name)
             
             signal_name = audio_name + ".txt"
-            signal_full_path = os.path.join(temp_path, signal_name)
+            signal_full_path = os.path.join(cfg.temp_path, signal_name)
 
             if os.path.exists(signal_full_path):
                 try:
@@ -71,7 +61,7 @@ def converter():
                         os.makedirs(save_root_path, exist_ok=True)
 
                     name_without_ext = os.path.splitext(audio_name)[0]
-                    final_tar_path = os.path.join(save_root_path, f"{name_without_ext}.{target_ext}")
+                    final_tar_path = os.path.join(save_root_path, f"{name_without_ext}.{cfg.target_ext}")
 
                     # 3. 提交任务：显式传入信号文件路径
                     t.submit(to_tar_ext, source_full_path, final_tar_path, signal_full_path)

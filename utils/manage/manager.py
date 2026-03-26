@@ -22,6 +22,7 @@ class Client_Manager:
         self.error_count = 0
         self.can_runs.set()
         self.files = 0
+        filters.user(self.report_id)
         self.setup_bot_handlers() # 执行bot的会话监听函数, 监控指令
 
         for _, _, files in os.walk(save_path):
@@ -30,7 +31,7 @@ class Client_Manager:
     def setup_bot_handlers(self):
         """将指令监听器绑定到 Bot 对象"""
         # 定义指令处理逻辑
-        async def handle_status(client, message):
+        async def handle_status():
             await self.report()
 
         # 注册处理器
@@ -55,8 +56,7 @@ class Client_Manager:
         f"  磁盘中已有 {self.files} 首歌曲\n"
         f"  发生错误: {self.error_count}次"
     )
-                
-        await self.bot.send_message(self.report_id, text)
+        await self.bot.send_message(self.report_id, text)        
 
     def need_stop(self):
         """判断是否需要冷却"""
