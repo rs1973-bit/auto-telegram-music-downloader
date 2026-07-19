@@ -1,19 +1,19 @@
 {
-    "model":{
-        "name":"", 
-        "key":""
-    },
     "telegram": {
         "api_id": "",
         "api_hash": "",
         "bot_token": "",
-        "name":"",
+        "session_name": "rs1973",
         "workers": 2
     },
     "monitoring": {
-        "exclude":["live", "现场", "remake", "remix"],
+        "exclude": [
+            "live",
+            "现场",
+            "remake",
+            "remix"
+        ],
         "target_channels": [
-            -1002321822091,
             -1001356243397,
             -1001235568157,
             -1001277825103
@@ -24,19 +24,19 @@
             ".dff",
             ".dsf"
         ],
-        "author": [],
-        "mail":"https://github.com/rs1973-bit/auto-telegram-music-downloader.git"
+        "author": [
+            "The Beatles"
+        ]
     },
     "paths": {
-        "temp_memory": "temp",
-        "final_library": "result",
-        "log_file": "bot_running.log"
+        "temp": "temp",
+        "result": "result",
+        "log": "bot_running.log"
     },
-    "audio_settings": {
-        "sample_rate": 88200,
-        "bit_depth": "s32",
-        "target_ext": "flac",
-        "convertor":"flac"
-
+    "audio": {
+        "sample_rate": 44100,
+        "bit_depth": "s16",
+        "format": "flac",
+        "codec": "flac"
     }
 }
