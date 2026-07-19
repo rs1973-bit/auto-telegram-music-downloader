@@ -1,14 +1,14 @@
 import asyncio
 import sys
 from pyrogram.client import Client
-from core.downloader import Downloader
-from server.searcher import Search_in_TG
-from utils.manage.manager import Client_Manager
-import os
-from utils.sql.sql_repo import SQL_REPO
-from server.get_idxs import MusicBrainzClient
-from utils.manage.setup import cfg
-
+from src.services.downloader import Downloader
+from src.services.searcher import Search_in_TG
+from src.utils.manager import Client_Manager
+from src.utils.report_bot import ReportBot
+from src.database.sql_repo import SQL_REPO
+from src.services.index import MusicIndexer
+from src.utils.config import cfg
+from src.services.converter import convert_worker
 
 async def run_session():
     """
@@ -18,8 +18,8 @@ async def run_session():
     name = cfg.bot_name, 
     api_id = cfg.api_id, 
     api_hash = cfg.api_hash, 
-    workers = 16, # 这是通讯线程, 不是文件下载线程
-    max_concurrent_transmissions = cfg.max_workers # 这才是文件下载线程
+    workers = 16, 
+    max_concurrent_transmissions = cfg.max_workers # 文件下载线程
     )   
 
     bot = Client(
@@ -29,48 +29,80 @@ async def run_session():
     bot_token = cfg.bot_token,
     workers=5
     )
-    local_queue = asyncio.Queue()
+    # ── 队列 ──────────────────────────────────────────────────────── #
+    song_queue: asyncio.Queue = asyncio.Queue()
+    conv_queue: asyncio.Queue = asyncio.Queue()
+
     sql = SQL_REPO()
     await sql.inital()
 
     # 获取歌手索引信息
-    mb = MusicBrainzClient(sql)
-    await mb.GET_IDX()
-    
+    # mb = MusicIndexer(sql)
+    # await mb.GET_IDX()
+
     print((">>> 正在启动 Telegram Client..."))
-    await app.start()   
+    await app.start()
     print((">>> Client 已启动..."))
     await bot.start()
     print('>>> 汇报机器人 已启动..')
-    
-    manager = Client_Manager(app, bot, cfg.save_path)
-    await bot.send_message(manager.report_id, "脚本已上线...")
-    # 使用 Search_in_TG 作为生产者
-    searcher = Search_in_TG(app, manager, local_queue, sql)
+
+    manager = Client_Manager(app, cfg.save_path)
+    report_bot = ReportBot(bot, manager, app.me.id)
+    await report_bot.send_notice("脚本已上线...")
+
+    # ── 1. 搜索器（生产者） ──────────────────────────────────────── #
+    searcher:Search_in_TG = Search_in_TG(app, manager, song_queue, sql)
     search_task = asyncio.create_task(searcher.GET_HISTORY_AUDIO())
 
-    # 启动 Downloader 消费者
-    dl = Downloader(app, manager, local_queue, sql)
+    # ── 2. 下载器（消费者） ──────────────────────────────────────── #
+    dl = Downloader(app, manager, song_queue, sql, conv_queue=conv_queue)
     num_workers = cfg.workers if getattr(cfg, 'workers', None) else 3
-    workers = [asyncio.create_task(dl.run()) for _ in range(num_workers)]
+    download_workers = [asyncio.create_task(dl.run()) for _ in range(num_workers)]
+
+    # ── 3. 转码器（独立消费者，不占用下载槽） ──────────────────── #
+    num_conv = 1
+    conv_workers = [asyncio.create_task(convert_worker(conv_queue, sql)) for _ in range(num_conv)]
+
     await asyncio.sleep(1)
 
-    while not search_task.done() or not local_queue.empty():
+    # ── 等待搜索完成 ────────────────────────────────────────────── #
+    while not search_task.done() or not song_queue.empty():
         if manager.need_stop():
-            await manager.restart()
+            await manager.restart(on_cooldown=report_bot.report)
         await asyncio.sleep(10)
 
     await search_task
-    print((">>> [生产者] 搜索器已扫描完所有目标频道"))
+    print((">>> [搜索器] 扫描完毕"))
 
+    # ── 停止下载器 ──────────────────────────────────────────────── #
     for _ in range(num_workers):
-        await local_queue.put(None)
+        await song_queue.put(None)
 
-    print((f">>> [队列] 正在等待剩余 {local_queue.qsize()} 个任务下载完成..."))
-    await asyncio.gather(*workers)
-    print((">>> [会话] 当前批次任务全部处理完毕")) 
-    print((f'尝试重新下载失败的文件'))
-    await dl.process_failed()
+    print((f">>> [下载器] 等待剩余 {song_queue.qsize()} 个任务完成..."))
+    await asyncio.gather(*download_workers)
+    print((">>> [下载器] 全部处理完毕"))
+
+    # ── 等待转码消费完毕 ────────────────────────────────────────── #
+    print(">>> [转码器] 等待剩余转码任务完成...")
+    await conv_queue.join()
+    print(">>> [转码器] 全部完成")
+
+    # ── 最终重试 ──────────────────────────────────────────────────── #
+    retry_tasks = await dl.process_failed()
+    if retry_tasks:
+        print(f">>> [重试] 有 {retry_tasks} 个失败任务待重试...")
+        download_workers = [asyncio.create_task(dl.run()) for _ in range(num_workers)]
+        await asyncio.sleep(2)
+        await song_queue.join()
+        for _ in range(num_workers):
+            await song_queue.put(None)
+        await asyncio.gather(*download_workers)
+        print(">>> [重试] 全部完成")
+
+    # ── 停止转码器 ──────────────────────────────────────────────── #
+    for _ in range(num_conv):
+        await conv_queue.put(None)
+    await asyncio.gather(*conv_workers)
 
 async def main():
     """

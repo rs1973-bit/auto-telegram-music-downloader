@@ -5,7 +5,7 @@ result/
 temp/
 **/__pycache__/
 .venv/
-tests/
-
+**/*.db
+config2.json
 
 
