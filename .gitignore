@@ -6,6 +6,6 @@ temp/
 **/__pycache__/
 .venv/
 **/*.db
-config2.json
+config-test.json
 scan_channel
 
