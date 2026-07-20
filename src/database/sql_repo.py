@@ -160,6 +160,8 @@ class SQL_REPO(BaseMuiscRepo):
         async with SQL_MANAGE(DATA_SQL_PATH) as cur:
             await cur.execute(f"""SELECT * FROM data WHERE band = ? AND album = ?""", (band, album))
             result = await cur.fetchall()
+            if not result:
+                return (-1, -1)
             return (result[0][4], result[-1][4])  # type: ignore
 
     async def get_failed_songs_in_DATA(self) -> list[tuple]:

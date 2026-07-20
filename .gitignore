@@ -7,5 +7,5 @@ temp/
 .venv/
 **/*.db
 config2.json
-
+scan_channel
 

@@ -150,8 +150,20 @@ class Downloader:
         target_path = os.path.join(current_save_dir, file_obj.file_name)
         return final_album_dir, target_path, need_conv
 
-    async def _ensure_downloaded(self, msg: Message, file_obj: Any, target_path: str) -> bool:
-        """若文件已完整则跳过，否则调用 robust_download，返回是否成功。"""
+    async def _ensure_downloaded(self, msg: Message, file_obj: Any, target_path: str, final_album_dir: str, need_conv: bool) -> bool:
+        """若文件已完整则跳过，否则调用 robust_download，返回是否成功。
+
+        转码模式下：
+          - 优先检查最终文件（temp 在转码后会被删除）
+          - 无最终文件时回退到检查 temp
+        """
+        if need_conv:
+            name = os.path.splitext(file_obj.file_name)[0]
+            final_path = os.path.join(final_album_dir, f"{name}.{cfg.target_ext}")
+            if os.path.exists(final_path):
+                logger.info(f"跳过已存在文件: {file_obj.file_name}")
+                return True
+
         if os.path.exists(target_path) and os.path.getsize(target_path) == file_obj.file_size:
             logger.info(f"跳过已存在文件: {file_obj.file_name}")
             return True
@@ -205,7 +217,7 @@ class Downloader:
             try:
                 msg, file_obj = await self._fetch_msg_and_file(task)
                 final_album_dir, target_path, need_conv = self._resolve_save_paths(task, file_obj)
-                success = await self._ensure_downloaded(msg, file_obj, target_path)
+                success = await self._ensure_downloaded(msg, file_obj, target_path, final_album_dir, need_conv)
 
                 if success:
                     await self._mark_success(task, target_path, final_album_dir, need_conv)
