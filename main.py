@@ -37,8 +37,8 @@ async def run_session():
     await sql.inital()
 
     # 获取歌手索引信息
-    # mb = MusicIndexer(sql)
-    # await mb.GET_IDX()
+    mb = MusicIndexer(sql)
+    await mb.GET_IDX()
 
     print((">>> 正在启动 Telegram Client..."))
     await app.start()

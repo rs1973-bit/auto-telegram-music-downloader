@@ -28,7 +28,7 @@ class config:
 
         # ── Monitoring ──────────────────────────────────────────── #
         self.targets: list[int] = list(_get(conf, "monitoring", "target_channels", default=[]))
-        self.author_list: list[str] = list(_get(conf, "monitoring", "author", default=[]))
+        self.author_list: list[str] = list(_get(conf, "telegram", "author_list", default=[]))
         self.exclude_list: list[str] = list(_get(conf, "monitoring", "exclude", default=[]))
         self.allowed_extensions: list[str] = list(
             _get(conf, "monitoring", "allowed_extensions", default=[])

@@ -1,42 +1,47 @@
 {
-    "telegram": {
-        "api_id": "",
-        "api_hash": "",
-        "bot_token": "",
-        "session_name": "rs1973",
-        "workers": 2
-    },
-    "monitoring": {
-        "exclude": [
-            "live",
-            "现场",
-            "remake",
-            "remix"
-        ],
-        "target_channels": [
-            -1001356243397,
-            -1001235568157,
-            -1001277825103
-        ],
-        "allowed_extensions": [
-            ".wav",
-            ".flac",
-            ".dff",
-            ".dsf"
-        ],
-        "author": [
-            "The Beatles"
-        ]
-    },
-    "paths": {
-        "temp": "temp",
-        "result": "result",
-        "log": "bot_running.log"
-    },
-    "audio": {
-        "sample_rate": 44100,
-        "bit_depth": "s16",
-        "format": "flac",
-        "codec": "flac"
-    }
+  "telegram": {
+    "api_id": "39050258",
+    "api_hash": "b6d45f6e29a5cb2fbd099a0b093dc99d",
+    "bot_token": "8275767036:AAHniZ4b71jRKdG-3R2k0N3MCL8tj1zNIKA",
+    "session_name": "rs1973",
+    "workers": 2,
+    "author_list": [
+      "The Beatles"
+    ]
+  },
+  "monitoring": {
+    "exclude": [
+      "live",
+      "现场",
+      "remake",
+      "remix"
+    ],
+    "target_channels": [
+      -1001356243397,
+      -1001235568157,
+      -1001277825103,
+      -1001684560515,
+      -1002321822091
+    ],
+    "allowed_extensions": [
+      ".wav",
+      ".flac",
+      ".dff",
+      ".dsf"
+    ],
+    "author": [
+      "The Beatles"
+    ]
+  },
+  "paths": {
+    "temp": "temp",
+    "result": "result",
+    "log": "bot_running.log"
+  },
+  "audio": {
+    "sample_rate": 44100,
+    "bit_depth": "s16",
+    "format": "flac",
+    "codec": "flac"
+  }
 }
