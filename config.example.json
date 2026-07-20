@@ -1,0 +1,41 @@
+{
+  "telegram": {
+    "api_id": "12345678",
+    "api_hash": "your_api_hash_here",
+    "bot_token": "1234567890:ABCdefGHIjklmNOPqrstUVwxyz",
+    "session_name": "my_session",
+    "workers": 2,
+    "author_list": [
+      "Artist Name"
+    ]
+  },
+  "monitoring": {
+    "exclude": [
+      "live",
+      "现场",
+      "remake",
+      "remix"
+    ],
+    "target_channels": [
+      -1001234567890
+    ],
+    "allowed_extensions": [
+      ".wav",
+      ".flac",
+      ".dff",
+      ".dsf"
+    ]
+  },
+  "paths": {
+    "temp": "temp",
+    "result": "result",
+    "log": "bot_running.log"
+  },
+  "audio": {
+    "sample_rate": 44100,
+    "bit_depth": "s16",
+    "format": "flac",
+    "codec": "flac"
+  }
+}
+
