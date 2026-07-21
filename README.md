@@ -2,6 +2,8 @@
 
 基于 Pyrogram 的异步 Telegram Userbot，用于从公开频道批量下载无损音乐（FLAC / DSD / DFF）并自动转码归档。
 
+为此，我收集并扫描了 40 个无损音乐频道（附语种/格式/曲风/音频数标签），你可以点击[这里](channels.md)挑选需要的频道。
+
 ## 功能
 
 - 📡 **频道监控** — 监听指定公开频道的新消息，自动过滤音频文件
@@ -66,21 +68,22 @@ Deezer Indexer (元数据索引)
     │   └── searcher.py      # 频道消息搜索
     └── utils/
         ├── config.py        # 配置读取
+        ├── language.py      # 语种检测
         ├── logger.py        # 日志
         ├── manager.py       # Client 管理器
         ├── report_bot.py    # 报告机器人
         └── search.py        # 搜索匹配逻辑
 ```
 
-### 搜索算法（三阶段）
+### 搜索算法
 
 `Search_in_TG.search_album_in_TG()` 按以下顺序尝试：
 
-1. **快速匹配** — 按歌手名搜索频道消息，逐条检查文件名是否匹配曲目列表
-2. **回落逐首** — 遍历频道所有音频，寻找专辑标题包含目标名的消息，建立上下文区间
-3. **精确单曲** — 提取特定歌手名下所有消息，按文件名逐一匹配曲目列表
+1. **文本快路径** — 按歌曲名搜索频道 caption，逐首匹配
+2. **全量扫描回落** — 扫描频道所有音频文件名缓存，逐首做模糊匹配
+3. **区间验证** — 匹配到第一首后，根据该消息 ID 推算整张专辑的区间，验证区间内所有曲目的命中率 ≥ 70%
 
-每阶段经过 `is_album_match()` 打分，命中率 ≥ 80% 才被接受。
+拉丁曲目用 token 级交集 + 长词包含检查，非拉丁曲目用全串模糊匹配（WRatio + partial_ratio），两者使用不同的评分算法。
 
 ---
 
@@ -121,21 +124,27 @@ pip install -r requirements.txt
 
 ### 4. 配置
 
-编辑 `config.json`：
+复制示例文件并根据自己的信息编辑：
+
+```bash
+cp config.example.json config.json
+```
+
+`config.json` 结构：
 
 ```json
 {
     "telegram": {
-        "api_id": "12345",
-        "api_hash": "your_api_hash",
+        "api_id": "12345678",
+        "api_hash": "your_api_hash_here",
         "bot_token": "your_bot_token",
-        "session_name": "rs1973",
-        "workers": 2
+        "session_name": "my_session",
+        "workers": 2,
+        "author_list": ["The Beatles"]
     },
     "monitoring": {
         "exclude": ["live", "现场", "remake", "remix"],
-        "target_channels": [-1001234567890],
-        "author": ["The Beatles"]
+        "target_channels": [-1001234567890]
     },
     "paths": {
         "temp": "temp",
@@ -172,13 +181,13 @@ python main.py
 | `bot_token` | 从 @BotFather 获取 |
 | `session_name` | Session 文件名（任意） |
 | `workers` | 下载并发数，建议 2–5 |
+| `author_list` | 要索引的歌手列表 |
 
 ### monitoring
 
 | 字段 | 说明 |
 |---|---|
 | `target_channels` | 要扫描的频道 ID 列表（负数） |
-| `author` | 要索引的歌手列表 |
 | `exclude` | 文件名含这些关键词时跳过 |
 
 ### paths
@@ -200,6 +209,63 @@ python main.py
 
 ---
 
+## 如何添加频道
+
+将频道加入 `config.json` 的 `target_channels` 后，bot 才会扫描该频道的消息并下载音频。
+
+频道全览见 [channels.md](channels.md)，包含语种、格式、音频数等信息。
+
+### 方式一：从 channels.md 选择（推荐）
+
+1. 打开 [channels.md](channels.md) 挑选频道
+2. 复制对应的 `channel_id`（负数，如 `-1001511716181`）
+3. 填入 `config.json` 的 `target_channels` 数组：
+
+```json
+"target_channels": [
+    -1001511716181,
+    -1001259286620
+]
+```
+
+### 方式二：自己查找频道 ID
+
+Telegram 频道 ID 是负数格式（`-100xxxxxxxxxx`）。获取方式：
+
+1. **如果你已经在频道里** — 使用 [@username_to_id_bot](https://t.me/username_to_id_bot)，发送频道链接即可
+(channels.md)）
+2. **手动推算** — 公开频道链接 `t.me/xxx` → 用 bot 调用 `getChat("@xxx")` 返回的 `id` 字段
+
+### 验证频道是否可达
+
+```bash
+python3 -c "
+import asyncio
+from src.utils.config import cfg
+from pyrogram import Client
+
+async def main():
+    app = Client(cfg.bot_name, api_id=cfg.api_id, api_hash=cfg.api_hash)
+    await app.start()
+    try:
+        chat = await app.get_chat(-1001511716181)
+        print(f'✅ {chat.title} — {chat.members_count} 成员')
+    except Exception as e:
+        print(f'❌ {e}')
+    await app.stop()
+
+asyncio.run(main())
+"
+```
+
+### 添加后的效果
+
+- bot 启动后会扫描该频道的所有历史消息，匹配目标歌手的音频文件并下载
+- 新消息通过频道监控（`idle()`）实时捕获
+- 如果频道私密（`🔒 私密`），你的 userbot 账号必须先加入该频道才会被扫描
+
+---
+
 ## 转码器配置
 
 | 编码器 | 输出格式 | 特性 |
@@ -218,13 +284,15 @@ python main.py
 
 ## 索引系统
 
-项目使用 **Deezer 公开 API** 作为索引源，无需 API 密钥。
+项目使用 **Deezer 公开 API + iTunes 纠正** 作为索引源，无需 API 密钥。
 
 流程：`search artist` → `get albums`（过滤录音室专辑） → `get tracks`
 
+- 混合索引：Deezer 为主源，曲目含非拉丁字符时自动回退到 iTunes（同语种版本）
+- 中日韩 / 西里尔语系歌手直接使用 iTunes 对应地区店（TW/JP/RU）
 - 专辑自动去重（剥离 `(Remastered)` 等后缀）
 - 非录音室专辑（Live / Compilation / Anthology）自动过滤
-- 全异步并发，Semaphore(3) 控制速率
+- 全异步并发
 - 结果缓存至 `songs.db`，后续运行零等待
 
 ---
@@ -254,6 +322,8 @@ python main.py
 
 ## 特别说明
 
+- 索引器支持拉丁、**中日韩**、**西里尔**三种语系的歌手名，自动选择正确的数据源地区。
+- 搜索匹配对不同语种使用不同策略：拉丁用 token 级交集，非拉丁用全串模糊匹配。
 - 本项目**不适合古典音乐** — 搜索算法以"歌手→专辑→曲目"上下文区间为基础，古典乐的多乐章结构和混乱命名会导致匹配失败。
 - 数据库文件 `songs.db` 和 `data.db` 存储所有状态，删除它们将丢失索引和进度。
 - 欢迎 Issue 和 PR。
