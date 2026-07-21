@@ -8,5 +8,4 @@ temp/
 **/*.db
 config-test.json
 scan_channel
-
 config.json
