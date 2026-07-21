@@ -37,7 +37,7 @@ class Client_Manager:
         """判断是否需要冷却（运行 ≥2h 或下载 ≥10GB）。"""
         now = time.time()
         if now - self.inital_time >= 2 * 60 * 60 or self.downloaded_size >= 10 * (1024 ** 3):
-            logger.info('准备冷却...')
+            logger.info('Preparing cooldown...')
             return True
         return False
 
@@ -48,12 +48,12 @@ class Client_Manager:
             on_cooldown: 可选异步回调，暂停后立即调用（如发送状态简报）。
         """
         stop_time = random.randint(300, 600)
-        logger.info(f"会话冷却开始, 冷却{stop_time}秒...")
+        logger.info(f"Cooldown started, {stop_time}s...")
         self.can_runs.clear()
         if on_cooldown:
             await on_cooldown()
         await asyncio.sleep(stop_time)
-        logger.info('冷却完成...')
+        logger.info('Cooldown done.')
         self.can_runs.set()
         self.inital_time = time.time()
         self.downloaded_size = 0

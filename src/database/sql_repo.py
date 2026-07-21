@@ -60,7 +60,7 @@ class SQL_REPO(BaseMuiscRepo):
                 await cur.execute("SELECT count(*) FROM songs")
                 row_count = (await cur.fetchone())[0]
                 if row_count > 0:
-                    print(f"  ℹ️  索引表 songs 已有 {row_count} 行数据，跳过建表")
+                    print(f"  ℹ️  Index table songs has {row_count} rows, skipping")
                     return
 
             await cur.execute("""

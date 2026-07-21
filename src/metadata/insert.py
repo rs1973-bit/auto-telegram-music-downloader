@@ -40,18 +40,18 @@ class INSERT_METADATA:
                     with open(self.lry_path, "r", encoding="utf-8") as l:
                         audio.lyrics = l.read()
                 except OSError as e:
-                    print(f"读取歌词文件失败: {e}")
+                    print(f"Failed reading lyrics: {e}")
 
             if self.cover_path:
                 try:
                     with open(self.cover_path, "rb") as c:
                         audio.images = [Image(c.read())]
                 except OSError as e:
-                    print(f"读取封面文件失败: {e}")
+                    print(f"Failed reading cover: {e}")
 
             audio.save()
 
         except FileTypeError:
-            print(f"不支持插入的音频格式, 文件: {self.file_path}")
+            print(f"Unsupported audio format: {self.file_path}")
         except Exception as e:
-            print(f"插入元数据失败, 文件: {self.file_path}, 错误: {e}")
+            print(f"Metadata insertion failed: {self.file_path}, error: {e}")

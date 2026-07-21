@@ -11,7 +11,7 @@ from src.meta import ConvTask
 
 def convert_file(source_path: str, tar_path: str) -> bool:
     """转码单个文件，返回是否成功。"""
-    print(f">>> 正在转码: {os.path.basename(source_path)}")
+    print(f">>> Converting: {os.path.basename(source_path)}")
     try:
         (ffmpeg
          .input(source_path)
@@ -24,12 +24,12 @@ def convert_file(source_path: str, tar_path: str) -> bool:
          .overwrite_output()
          .run(capture_stdout=True, capture_stderr=True))
 
-        print(f"--- 转码成功: {os.path.basename(tar_path)}")
+        print(f"--- Conversion OK: {os.path.basename(tar_path)}")
         os.remove(source_path)
         return True
 
     except Exception as e:
-        print(f' [!] 转码失败: {e} \n  源文件: {source_path}')
+        print(f' [!] Conversion failed: {e} \n  Source: {source_path}')
         with open(f"{tar_path}.FAILED", "w") as f:
             f.write(f"{source_path} CONVERT FAILED")
         return False
@@ -44,15 +44,15 @@ async def _write_metadata(tar_path: str, ct: ConvTask) -> None:
         song = ct.song_task
         album = ct.album_task or (song.album if song else None)
         if not song or not album:
-            logger.info("跳过元数据写入: ConvTask 未携带 SongTask/AlbumTask")
+            logger.info("Skipping metadata: ConvTask has no SongTask/AlbumTask")
             return
 
         writer = INSERT_METADATA(tar_path, song, album)
         await writer.insert()
     except ImportError:
-        logger.info("mediafile 未安装，跳过元数据写入")
+        logger.info("mediafile not installed, skipping metadata")
     except Exception as e:
-        logger.error(f"元数据写入异常: {e}")
+        logger.error(f"Metadata write error: {e}")
 
 
 async def convert_worker(
@@ -84,12 +84,12 @@ async def convert_worker(
             if ok:
                 await _write_metadata(tar_path, ct)
                 await sql.update_DATA_status([(ct.band, ct.album, ct.song)], 1)
-                logger.info(f"转码完成: {ct.band} - {ct.album} - {ct.song}")
+                logger.info(f"Conversion complete: {ct.band} - {ct.album} - {ct.song}")
             else:
                 await sql.update_DATA_status([(ct.band, ct.album, ct.song)], -1)
-                logger.error(f"转码失败: {ct.band} - {ct.album} - {ct.song}")
+                logger.error(f"Conversion failed: {ct.band} - {ct.album} - {ct.song}")
         except Exception as e:
-            logger.error(f"转码消费者异常: {e}")
+            logger.error(f"Converter error: {e}")
             await sql.update_DATA_status([(ct.band, ct.album, ct.song)], -1)
         finally:
             conv_queue.task_done()

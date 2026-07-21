@@ -87,7 +87,7 @@ class MusicIndexer:
                     return None
                 logger.warning(f"HTTP {e.response.status_code} — {url}")
             except Exception as e:
-                logger.warning(f"请求失败(重试 {i + 1}/{MAX_RETRIES}): {url} — {e}")
+                logger.warning(f"Request failed (retry {i + 1}/{MAX_RETRIES}): {url} — {e}")
                 if i < MAX_RETRIES - 1:
                     await asyncio.sleep(2**i)
         return None
@@ -236,15 +236,15 @@ class MusicIndexer:
                     itunes_tracks = await self._itunes_search_album(alb_name, itunes_name, itunes_countries)
                     if itunes_tracks:
                         tracks = itunes_tracks
-                        logger.info(f"    {alb_name}: {len(tracks)} 首 (iTunes 纠正)")
+                        logger.info(f"    {alb_name}: {len(tracks)} tracks (iTunes corrected)")
 
             if tracks:
                 matched = [(artist, alb_name, t) for t in tracks if _match(t, track_filter)]
                 if matched:
                     self.result.extend(matched)
-                    logger.info(f"    {alb_name}: {len(matched)} 首")
+                    logger.info(f"    {alb_name}: {len(matched)} tracks")
                 else:
-                    logger.warning(f"    {alb_name}: 无匹配曲目")
+                    logger.warning(f"    {alb_name}: no matching tracks")
 
         return True
 
@@ -270,11 +270,11 @@ class MusicIndexer:
                 matched = [(artist, alb_name, t) for t in tracks if _match(t, track_filter)]
                 if matched:
                     self.result.extend(matched)
-                    logger.info(f"    {alb_name}: {len(matched)} 首")
+                    logger.info(f"    {alb_name}: {len(matched)} tracks")
                 else:
-                    logger.warning(f"    {alb_name}: 无匹配曲目")
+                    logger.warning(f"    {alb_name}: no matching tracks")
             else:
-                logger.warning(f"    {alb_name}: 无曲目")
+                logger.warning(f"    {alb_name}: no tracks")
 
     async def task(self, input_str: str):
         """索引入口。
@@ -297,7 +297,7 @@ class MusicIndexer:
             detail += " / *"
         if track_filter:
             detail += f" / {track_filter}"
-        logger.info(f"正在索引: {detail}")
+        logger.info(f"Indexing: {detail}")
 
         itunes_id, itunes_name = await self._itunes_artist(artist_name)
         itunes_countries = _itunes_countries(itunes_name)
@@ -310,7 +310,7 @@ class MusicIndexer:
                     album_filter=album_filter, track_filter=track_filter,
                 )
             else:
-                logger.warning(f"iTunes 未找到: {artist_name}")
+                logger.warning(f"iTunes not found: {artist_name}")
             return
 
         deezer_id = await self._deezer_artist(artist_name)
@@ -320,24 +320,24 @@ class MusicIndexer:
                 album_filter=album_filter, track_filter=track_filter,
             )
             if not ok and itunes_id:
-                logger.info("  → Deezer 无录音室专辑，切 iTunes")
+                logger.info("  → Deezer has no studio albums, switching to iTunes")
                 await self._index_from_itunes(
                     artist_name, itunes_id, itunes_countries,
                     album_filter=album_filter, track_filter=track_filter,
                 )
         elif itunes_id:
-            logger.info("  → Deezer 未找到，切 iTunes")
+            logger.info("  → Deezer not found, switching to iTunes")
             await self._index_from_itunes(
                 artist_name, itunes_id, itunes_countries,
                 album_filter=album_filter, track_filter=track_filter,
             )
         else:
-            logger.warning(f"Deezer 和 iTunes 均未找到: {artist_name}")
+            logger.warning(f"Not found on Deezer or iTunes: {artist_name}")
 
     # ── 入口 ────────────────────────────────────────────────
     async def GET_IDX(self):
         if await self.sql.count_idx_songs() > 0:
-            logger.info("索引表 songs 已有数据，跳过索引")
+            logger.info("Index table already has data, skipping indexing")
             self.done = True
             return
         tasks = [self.task(a) for a in cfg.author_list]
@@ -345,7 +345,7 @@ class MusicIndexer:
             await asyncio.gather(*tasks)
         if self.result:
             await self.sql.insert_for_GET_IDX(self.result)
-            logger.info(f"索引完成，共写入 {len(self.result)} 首曲目")
+            logger.info(f"Indexing complete, wrote {len(self.result)} tracks")
         else:
-            logger.warning("索引结果为空，未写入数据库")
+            logger.warning("Index results empty, nothing written")
         self.done = True

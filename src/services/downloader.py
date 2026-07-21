@@ -67,7 +67,7 @@ class Downloader:
         final_size = os.path.getsize(target_path)
         if final_size < expected_size:
             raise RuntimeError(f"不完整: {final_size}/{expected_size}")
-        logger.info(f"文件 {file_name} 下载成功")
+        logger.info(f"File {file_name} downloaded successfully")
         self.manager.files += 1
         self.manager.report_size += final_size - pre_size
 
@@ -77,7 +77,7 @@ class Downloader:
             async with dc_auth_lock:
                 if self.manager.can_runs.is_set():
                     wait_time = e.value if hasattr(e, 'value') else 60
-                    logger.error(f"触发风控/暂停，休眠 {wait_time}s")
+                    logger.error(f"Rate limited/paused, sleeping {wait_time}s")
                     self.manager.can_runs.clear()
                     self.manager.error_count += 1
                     await asyncio.sleep(wait_time)
@@ -93,7 +93,7 @@ class Downloader:
 
         # 清理脏尾部 → 刷新链接 → 续传
         self._truncate(target_path, aligned)
-        logger.info('刷新消息链接...')
+        logger.info('Refreshing message links...')
         msg = await self.client.get_messages(msg.chat.id, msg.id)
         await self._stream(msg, target_path, aligned)
         self._verify(target_path, expected_size, pre_size, file_name)
@@ -113,12 +113,12 @@ class Downloader:
 
             except RPCError as e:
                 self.manager.error_count += 1
-                logger.error(f"RPC错误 [尝试 {attempt}]: {getattr(e, 'NAME', '')} - {getattr(e, 'MESSAGE', e)}")
+                logger.error(f"RPC error [attempt {attempt}]: {getattr(e, 'NAME', '')} - {getattr(e, 'MESSAGE', e)}")
                 await asyncio.sleep(random.uniform(5, 10))
 
             except Exception as e:
                 self.manager.error_count += 1
-                logger.error(f"未预期异常 [尝试 {attempt}]: {type(e).__name__} - {e}")
+                logger.error(f"Unexpected error [attempt {attempt}]: {type(e).__name__} - {e}")
                 await asyncio.sleep(random.uniform(5, 15))
         return False
 
@@ -161,11 +161,11 @@ class Downloader:
             name = os.path.splitext(file_obj.file_name)[0]
             final_path = os.path.join(final_album_dir, f"{name}.{cfg.target_ext}")
             if os.path.exists(final_path):
-                logger.info(f"跳过已存在文件: {file_obj.file_name}")
+                logger.info(f"Skipping existing file: {file_obj.file_name}")
                 return True
 
         if os.path.exists(target_path) and os.path.getsize(target_path) == file_obj.file_size:
-            logger.info(f"跳过已存在文件: {file_obj.file_name}")
+            logger.info(f"Skipping existing file: {file_obj.file_name}")
             return True
         return await self.robust_download(msg, target_path, file_obj.file_size)
 
@@ -187,15 +187,15 @@ class Downloader:
                 album_task=task.album,
             )
             await self.conv_queue.put(ct)
-            logger.info(f"已下载待转码: {task.band} - {task.album.name} - {task.song}")
+            logger.info(f"Downloaded, pending conversion: {task.band} - {task.album.name} - {task.song}")
         else:
             await self.sql.update_DATA_status([(task.band, task.album.name, task.song)], 1)
-            logger.info(f"下载完成: {task.band} - {task.album.name} - {task.song}")
+            logger.info(f"Download complete: {task.band} - {task.album.name} - {task.song}")
 
     async def _mark_failure(self, task: SongTask, file_obj: Any) -> None:
         """下载失败后：标记数据库状态并追加写入失败日志。"""
         await self.sql.update_DATA_status([(task.band, task.album.name, task.song)], -1)
-        logger.error(f"下载失败并已标记: {task.band} - {task.album.name} - {task.song}")
+        logger.error(f"Download failed (marked): {task.band} - {task.album.name} - {task.song}")
         error_data = {
             "band": task.band,
             "album": task.album.name,
@@ -211,7 +211,7 @@ class Downloader:
         async with self.song_semaphore:
             status = await self.sql.get_status_from_DATA(task.band, task.album.name, task.song)
             if status == 1:
-                logger.info(f"跳过已下载: {task.band} - {task.album.name} - {task.song}")
+                logger.info(f"Skipping already downloaded: {task.band} - {task.album.name} - {task.song}")
                 return True
 
             try:
@@ -227,7 +227,7 @@ class Downloader:
                     return False
 
             except Exception as e:
-                logger.error(f"处理任务异常: {task} -> {e}")
+                logger.error(f"Task error: {task} -> {e}")
                 await self.sql.update_DATA_status([(task.band, task.album.name, task.song)], -1)
                 return False
 
@@ -262,9 +262,9 @@ class Downloader:
             if 'band' in task and 'album' in task and 'msg_ids' in task and 'chat_id' in task:
                 await self._expand_legacy_album_task(task)
             else:
-                logger.warning(f"收到未知任务类型，跳过: {task}")
+                logger.warning(f"Unknown task type, skipping: {task}")
         else:
-            logger.warning(f"收到不可识别任务，跳过: {task}")
+            logger.warning(f"Unrecognized task, skipping: {task}")
 
     async def run(self) -> None:
         """持续从队列消费 `SongTask` 并处理。"""
@@ -303,5 +303,5 @@ class Downloader:
             st = self._row_to_song_task(row)
             await self.queue.put(st)
 
-        logger.info(f"已将 {len(failed_rows)} 个失败任务重新入队")
+        logger.info(f"Re-queued {len(failed_rows)} failed tasks")
         return len(failed_rows)
