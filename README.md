@@ -2,6 +2,8 @@
 
 基于 Pyrogram 的异步 Telegram Userbot，用于从公开频道批量下载无损音乐（FLAC / DSD / DFF）并自动转码归档。
 
+为此，我收集并扫描了 40 个无损音乐频道（附语种/格式/曲风/音频数标签），你可以点击[这里](channels.md)挑选需要的频道。
+
 ## 功能
 
 - 📡 **频道监控** — 监听指定公开频道的新消息，自动过滤音频文件
@@ -207,6 +209,63 @@ python main.py
 
 ---
 
+## 如何添加频道
+
+将频道加入 `config.json` 的 `target_channels` 后，bot 才会扫描该频道的消息并下载音频。
+
+频道全览见 [channels.md](channels.md)，包含语种、格式、音频数等信息。
+
+### 方式一：从 channels.md 选择（推荐）
+
+1. 打开 [channels.md](channels.md) 挑选频道
+2. 复制对应的 `channel_id`（负数，如 `-1001511716181`）
+3. 填入 `config.json` 的 `target_channels` 数组：
+
+```json
+"target_channels": [
+    -1001511716181,
+    -1001259286620
+]
+```
+
+### 方式二：自己查找频道 ID
+
+Telegram 频道 ID 是负数格式（`-100xxxxxxxxxx`）。获取方式：
+
+1. **如果你已经在频道里** — 使用 [@username_to_id_bot](https://t.me/username_to_id_bot)，发送频道链接即可
+(channels.md)）
+2. **手动推算** — 公开频道链接 `t.me/xxx` → 用 bot 调用 `getChat("@xxx")` 返回的 `id` 字段
+
+### 验证频道是否可达
+
+```bash
+python3 -c "
+import asyncio
+from src.utils.config import cfg
+from pyrogram import Client
+
+async def main():
+    app = Client(cfg.bot_name, api_id=cfg.api_id, api_hash=cfg.api_hash)
+    await app.start()
+    try:
+        chat = await app.get_chat(-1001511716181)
+        print(f'✅ {chat.title} — {chat.members_count} 成员')
+    except Exception as e:
+        print(f'❌ {e}')
+    await app.stop()
+
+asyncio.run(main())
+"
+```
+
+### 添加后的效果
+
+- bot 启动后会扫描该频道的所有历史消息，匹配目标歌手的音频文件并下载
+- 新消息通过频道监控（`idle()`）实时捕获
+- 如果频道私密（`🔒 私密`），你的 userbot 账号必须先加入该频道才会被扫描
+
+---
+
 ## 转码器配置
 
 | 编码器 | 输出格式 | 特性 |
@@ -233,7 +292,7 @@ python main.py
 - 中日韩 / 西里尔语系歌手直接使用 iTunes 对应地区店（TW/JP/RU）
 - 专辑自动去重（剥离 `(Remastered)` 等后缀）
 - 非录音室专辑（Live / Compilation / Anthology）自动过滤
-- 全异步并发，Semaphore(3) 控制速率
+- 全异步并发
 - 结果缓存至 `songs.db`，后续运行零等待
 
 ---
