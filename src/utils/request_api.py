@@ -19,6 +19,6 @@ async def request_api(
             return result
         except Exception as e:
             name = getattr(func, "__name__", "task")
-            print(f'[尝试 {i}] {name} 出错: {e}')
+            print(f'[Attempt {i}] {name} error: {e}')
             await asyncio.sleep(2 ** i)
     return None

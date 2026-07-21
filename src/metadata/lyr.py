@@ -51,10 +51,10 @@ class Get_lry:
             file_path = str(LYR / file_name)
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(lyrics)
-            print(f"歌词已保存: {file_name}")
+            print(f"Lyrics saved: {file_name}")
             return file_path
         except Exception as e:
-            print(f"文件写入失败: {e}")
+            print(f"File write failed: {e}")
             return ""
 
     async def get_lyrics(self, song: SongTask) -> Optional[str]:
@@ -110,5 +110,5 @@ class Get_lry:
                         )
 
             except Exception as e:
-                print(f"获取歌词异常: {e}")
+                print(f"Lyrics fetch error: {e}")
         return ""

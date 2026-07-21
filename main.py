@@ -40,11 +40,11 @@ async def run_session():
     mb = MusicIndexer(sql)
     await mb.GET_IDX()
 
-    print((">>> 正在启动 Telegram Client..."))
+    print((">>> Starting Telegram Client..."))
     await app.start()
-    print((">>> Client 已启动..."))
+    print((">>> Client started..."))
     await bot.start()
-    print('>>> 汇报机器人 已启动..')
+    print('>>> Report bot started...')
 
     manager = Client_Manager(app, cfg.save_path)
     report_bot = ReportBot(bot, manager, app.me.id)
@@ -72,32 +72,32 @@ async def run_session():
         await asyncio.sleep(10)
 
     await search_task
-    print((">>> [搜索器] 扫描完毕"))
+    print((">>> [Scanner] scan complete"))
 
     # ── 停止下载器 ──────────────────────────────────────────────── #
     for _ in range(num_workers):
         await song_queue.put(None)
 
-    print((f">>> [下载器] 等待剩余 {song_queue.qsize()} 个任务完成..."))
+    print((f">>> [Downloader] waiting for {song_queue.qsize()} remaining tasks..."))
     await asyncio.gather(*download_workers)
-    print((">>> [下载器] 全部处理完毕"))
+    print((">>> [Downloader] all done"))
 
     # ── 等待转码消费完毕 ────────────────────────────────────────── #
-    print(">>> [转码器] 等待剩余转码任务完成...")
+    print(">>> [Converter] waiting for remaining tasks...")
     await conv_queue.join()
-    print(">>> [转码器] 全部完成")
+    print(">>> [Converter] all done")
 
     # ── 最终重试 ──────────────────────────────────────────────────── #
     retry_tasks = await dl.process_failed()
     if retry_tasks:
-        print(f">>> [重试] 有 {retry_tasks} 个失败任务待重试...")
+        print(f">>> [Retry] {retry_tasks} failed tasks to retry...")
         download_workers = [asyncio.create_task(dl.run()) for _ in range(num_workers)]
         await asyncio.sleep(2)
         await song_queue.join()
         for _ in range(num_workers):
             await song_queue.put(None)
         await asyncio.gather(*download_workers)
-        print(">>> [重试] 全部完成")
+        print(">>> [Retry] all done")
 
     # ── 停止转码器 ──────────────────────────────────────────────── #
     for _ in range(num_conv):
@@ -114,20 +114,20 @@ async def main():
             await run_session()
             
             print(("========================================"))
-            print(("所有预定任务执行完毕，程序将正常退出"))
+            print(("All tasks completed, exiting normally"))
             print(("========================================"))
             break 
             
         except ConnectionError:
-            print(("网络连接中断，60秒后尝试重连..."))
+            print(("Connection lost, retrying in 60s..."))
             await asyncio.sleep(60)
             
         except Exception as e:
-            print((f"发生未预期错误: {e}"))
+            print((f"Unexpected error: {e}"))
             import traceback
             traceback.print_exc()
             
-            print(("系统将在 1 分钟后尝试重启..."))
+            print(("Restarting in 1 minute..."))
             await asyncio.sleep(60) 
 
 if __name__ == "__main__":
@@ -135,5 +135,5 @@ if __name__ == "__main__":
         asyncio.run(main())
 
     except KeyboardInterrupt:
-        print(("\n[!] 用户强制停止程序，正在清理环境..."))
+        print(("\n[!] Interrupted by user, cleaning up..."))
         sys.exit(0)

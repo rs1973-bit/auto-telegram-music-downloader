@@ -50,7 +50,7 @@ class Search_in_TG:
                     break
                 messages.append(msg)
         except Exception as e:
-            print(f"拉取区间记录时出错: {e}")
+            print(f"Error fetching record range: {e}")
         messages.reverse()
         return messages
 
@@ -75,7 +75,7 @@ class Search_in_TG:
     async def search_song_in_TG(self, band: str, album: str, chat_id: int, song: str,
                                  scanned: dict[str, tuple[int, str]] | None = None) -> tuple[int, int, int] | None:
         """在频道中搜索一首歌，匹配到即返回 (chat_id, start, end) 区间。"""
-        print(f"  [搜索] 正在搜寻: {song}")
+        print(f"  [Search] Searching: {song}")
         songs = await self.sql.get_songs_from_IDX(band, album)
         album_len = len(songs)
         original_idx = songs.index(song)
@@ -111,14 +111,14 @@ class Search_in_TG:
         return None
 
     async def submit_task(self, band: str, album: str, rate: float, chat_id: int, start: int, end: int) -> None:
-        print(f"""  [命中] {band} - {album} | 命中率: {rate:.2f} | ID: {start}-{end} CHAT_ID: {chat_id}""")
+        print(f"""  [Hit] {band} - {album} | hit rate: {rate:.2f} | ID: {start}-{end} CHAT_ID: {chat_id}""")
         songs = await self.sql.get_songs_from_IDX(band, album)
         pending_tasks = []
         first = start
         for idx, song in enumerate(songs, start=1):
             status = await self.sql.get_status_from_DATA(band, album, song)
             if status == 1:
-                print(f"  [跳过] 已下载: {band} - {album} - {song}")
+                print(f"  [Skip] Already downloaded: {band} - {album} - {song}")
             else:
                 task = SongTask(
                     band=band, album=AlbumTask(name=album, band=band),
@@ -127,7 +127,7 @@ class Search_in_TG:
                 pending_tasks.append(task)
             first += 1
         if not pending_tasks:
-            print(f"  [信息] 专辑 {band} - {album} 的所有曲目已下载，跳过任务。")
+            print(f"  [Info] Album {band} - {album} fully downloaded, skipping.")
             return
         await self.sql.insert_for_DATA(pending_tasks)
         for t in pending_tasks:
@@ -145,7 +145,7 @@ class Search_in_TG:
         拉丁与非拉丁曲目使用统一入口；is_song_match 内部按语种切换策略。
         """
         for chat_id in self.channels:
-            print(f"频道 {chat_id} 探测中...")
+            print(f"Probing channel {chat_id}...")
             songs = await self.sql.get_songs_from_IDX(band, album)
             sorted_songs = sorted(songs)
             scanned: dict[str, tuple[int, str]] | None = None
@@ -155,7 +155,7 @@ class Search_in_TG:
                 if await self.sql.is_song_exists(band, album, song):
                     status = await self.sql.get_status_from_DATA(band, album, song)
                     if status == 1:
-                        print(f"  [跳过] {band} - {album} - {song} 已下载")
+                        print(f"  [Skip] {band} - {album} - {song} already downloaded")
                         continue
                 all_done = False
 
@@ -168,12 +168,12 @@ class Search_in_TG:
                     chat_id, start, end = id_range
                     rate, details = await self.validate_album_status(band, album, chat_id, start, end)
                     if rate >= 0.7:
-                        print(f"  [验证] 命中率 {rate}, 逐首详情: {details}")
+                        print(f"  [Verify] Hit rate {rate}, details: {details}")
                         await self.submit_task(band, album, rate, chat_id, start, end)
                         return True
 
             if all_done:
-                print(f"  [信息] 专辑 {band} - {album} 的所有曲目已下载，跳过任务。")
+                print(f"  [Info] Album {band} - {album} fully downloaded, skipping.")
                 return True
         return False
 
@@ -183,7 +183,7 @@ class Search_in_TG:
             for album in albums:
                 ok = await self.search_album_in_TG(auther, album)
                 if not ok:
-                    print(f"[结果] 遍历完所有目标频道，未找到专辑: {album}")
+                    print(f"[Result] Scanned all channels, album not found: {album}")
             
 
 
