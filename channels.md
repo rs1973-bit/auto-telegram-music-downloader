@@ -14,7 +14,11 @@
 | Hi-Res Music Channel █ | `-1001356243397` | русский, EN | FLAC | Rock, Pop | 353 | [t.me/HiResMusicChannel](https://t.me/HiResMusicChannel) |
 | Музыка Hi-Res FLAC / WAV | `-1001277825103` | EN, русский | FLAC | Metal, Electronic | 387 | [t.me/musicbox161](https://t.me/musicbox161) |
 | Music in DSD, WAVE | `-1001235568157` | русский | DSF/WAV/WV | Classical, Rock | 370 | [t.me/musicindsd](https://t.me/musicindsd) |
+
+## 新发现频道
+
 | 频道名 | channel_id | 语种(Top3) | 音频格式 | 曲种 | 音频数量 | 链接 |
+|--------|-----------|-----------|---------|------|---------|------|
 | 无损音乐 | `-1001511716181` | 中文 | FLAC/MP3 | 多曲风 | 545 | [t.me/wusunmusic](https://t.me/wusunmusic) |
 | FLAC Music \| LossLess \| HiFi | `-1001987375359` | EN | FLAC | 多曲风 | 400 | [t.me/flacmusic23](https://t.me/flacmusic23) |
 | 无损音乐｜LosslessMusic | `-1001314868367` | 中文 | FLAC/MP3 | Pop | 396 | [t.me/superlosslessmusic](https://t.me/superlosslessmusic) |
