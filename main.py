@@ -22,13 +22,6 @@ async def run_session():
     max_concurrent_transmissions = cfg.max_workers # 文件下载线程
     )   
 
-    bot = Client(
-    "report",
-    api_id = cfg.api_id,
-    api_hash = cfg.api_hash,
-    bot_token = cfg.bot_token,
-    workers=5
-    )
     # ── 队列 ──────────────────────────────────────────────────────── #
     song_queue: asyncio.Queue = asyncio.Queue()
     conv_queue: asyncio.Queue = asyncio.Queue()
@@ -43,12 +36,23 @@ async def run_session():
     print((">>> Starting Telegram Client..."))
     await app.start()
     print((">>> Client started..."))
-    await bot.start()
-    print('>>> Report bot started...')
 
     manager = Client_Manager(app, cfg.save_path)
-    report_bot = ReportBot(bot, manager, app.me.id)
-    await report_bot.send_notice("脚本已上线...")
+
+    # ── 汇报机器人（可选） ──────────────────────────────────────────── #
+    report_bot = None
+    if cfg.bot_token:
+        bot = Client(
+            "report",
+            api_id=cfg.api_id,
+            api_hash=cfg.api_hash,
+            bot_token=cfg.bot_token,
+            workers=5,
+        )
+        await bot.start()
+        print(">>> Report bot started...")
+        report_bot = ReportBot(bot, manager, app.me.id)
+        await report_bot.send_notice("Bot is online...")
 
     # ── 1. 搜索器（生产者） ──────────────────────────────────────── #
     searcher:Search_in_TG = Search_in_TG(app, manager, song_queue, sql)
@@ -68,7 +72,7 @@ async def run_session():
     # ── 等待搜索完成 ────────────────────────────────────────────── #
     while not search_task.done() or not song_queue.empty():
         if manager.need_stop():
-            await manager.restart(on_cooldown=report_bot.report)
+            await manager.restart(on_cooldown=report_bot.report if report_bot else None)
         await asyncio.sleep(10)
 
     await search_task

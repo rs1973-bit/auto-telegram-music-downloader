@@ -46,14 +46,14 @@ class ReportBot:
         m = self.manager
 
         text = (
-            f"状态/任务简报:\n"
-            f"  bot已运行: {(time.time() - self.report_time) / 3600:.2f} 小时\n"
-            f"  bot状态: {'激活' if m.can_runs.is_set() else '休眠中'}\n"
-            f"  cpu占用: {cpu}%\n"
-            f"  内存占用: {mem}%\n"
-            f"  已下载: {m.report_size / (1024 ** 3):.2f} GB\n"
-            f"  磁盘中已有 {m.files} 首歌曲\n"
-            f"  发生错误: {m.error_count}次"
+            f"Status Report:\n"
+            f"  Uptime: {(time.time() - self.report_time) / 3600:.2f} h\n"
+            f"  Bot status: {'Active' if m.can_runs.is_set() else 'Sleeping'}\n"
+            f"  CPU: {cpu}%\n"
+            f"  Memory: {mem}%\n"
+            f"  Downloaded: {m.report_size / (1024 ** 3):.2f} GB\n"
+            f"  Files on disk: {m.files}\n"
+            f"  Errors: {m.error_count}"
         )
         await self.bot.send_message(self.report_id, text)
 
