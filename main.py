@@ -1,5 +1,10 @@
 import asyncio
 import sys
+# pyrogram预设的最小channel_id是-1002147483647, 小于这个值的id会被认为是非法的，故
+# 在下文将下限设置得更低
+import pyrogram.utils
+pyrogram.utils.MIN_CHANNEL_ID = -1009999999999
+
 from pyrogram.client import Client
 from src.services.downloader import Downloader
 from src.services.searcher import Search_in_TG
