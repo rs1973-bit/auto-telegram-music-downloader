@@ -1,150 +1,76 @@
 # Auto Telegram Music Downloader
 
-基于 Pyrogram 的异步 Telegram Userbot，用于从公开频道批量下载无损音乐（FLAC / DSD / DFF）并自动转码归档。
-
-为此，我收集并扫描了 40 个无损音乐频道（附语种/格式/曲风/音频数标签），你可以点击[这里](channels.md)挑选需要的频道。
-
-## 功能
-
-- 📡 **频道监控** — 监听指定公开频道的新消息，自动过滤音频文件
-- 🔍 **智能搜索** — 三阶段模糊匹配，从文件名/描述中提取歌手+专辑信息
-- ⬇️ **批量下载** — 并发下载，支持断点续传，自动跳过已下载文件
-- 🔄 **自动转码** — DSF/DFF → FLAC，可配置采样率/位深
-- 🏷️ **元数据写入** — 自动添加封面、歌手、专辑、曲目号等标签
-- 🗃️ **索引缓存** — Deezer API 索引结果缓存到 `songs.db`，避免重复请求
-- 📋 **失败重试** — 下载/转码失败自动重试
+从 Telegram 公开频道自动搜索并批量下载无损音乐（FLAC / WAV / DSF），支持并发下载、自动转码、封面/歌词/元数据写入。
 
 ---
 
-## 架构
+## 目录
 
-整个程序是一个**异步生产者-消费者**管道：
-
-```
-Deezer Indexer (元数据索引)
-        │
-        ▼
-  Searcher (扫描频道 → 模糊匹配 → song_queue)
-        │
-        ▼
-  Downloader (song_queue 消费者 → 下载 → conv_queue)
-        │
-        ▼
-  Converter (conv_queue 消费者 → ffmpeg → 归档)
-```
-
-| 阶段 | 职责 | 并发控制 |
-|---|---|---|
-| 索引器 | 从 Deezer API 获取录音室专辑曲目列表，写入 SQLite | 全异步，Semaphore(3) |
-| 搜索器 | 扫描目标频道历史消息，三阶段模糊匹配，入队 `song_queue` | 1 个异步 Task |
-| 下载器 | 消费 `SongTask`，支持断点续传、失败重试、全局流量控制 | `workers` 个异步 Task |
-| 转码器 | 消费 `ConvTask`，ffmpeg 转码后更新数据库 | 1 个异步 Task |
-
-**数据库：**
-- **songs.db** — 索引缓存：歌手→专辑→曲目（Deezer 缓存）
-- **data.db** — 状态表：每首歌曲下载/转码状态（0=待下载, 1=完成, 2=待转码, -1=失败）
-
----
-
-## 项目结构
-
-```
-├── config.json              # 配置文件
-├── main.py                  # 入口
-├── songs.db                 # 索引缓存数据库
-├── temp/                    # 临时文件（转码中转）
-├── result/                  # 最终输出
-└── src/
-    ├── database/
-    │   └── sql_repo.py      # 数据库操作
-    ├── metadata/
-    │   ├── cover.py         # 封面下载
-    │   ├── insert.py        # 元数据写入
-    │   └── lyr.py           # 歌词缓存
-    ├── services/
-    │   ├── converter.py     # 音频转码 (ffmpeg)
-    │   ├── downloader.py    # 下载器
-    │   ├── index.py         # 索引器 (Deezer API)
-    │   └── searcher.py      # 频道消息搜索
-    └── utils/
-        ├── config.py        # 配置读取
-        ├── language.py      # 语种检测
-        ├── logger.py        # 日志
-        ├── manager.py       # Client 管理器
-        ├── report_bot.py    # 报告机器人
-        └── search.py        # 搜索匹配逻辑
-```
-
-### 搜索算法
-
-`Search_in_TG.search_album_in_TG()` 按以下顺序尝试：
-
-1. **文本快路径** — 按歌曲名搜索频道 caption，逐首匹配
-2. **全量扫描回落** — 扫描频道所有音频文件名缓存，逐首做模糊匹配
-3. **区间验证** — 匹配到第一首后，根据该消息 ID 推算整张专辑的区间，验证区间内所有曲目的命中率 ≥ 70%
-
-拉丁曲目用 token 级交集 + 长词包含检查，非拉丁曲目用全串模糊匹配（WRatio + partial_ratio），两者使用不同的评分算法。
+- [快速开始](#快速开始)
+- [第一步：配置 config.json](#第一步配置-configjson)
+- [第二步：运行](#第二步运行)
+- [配置详解](#配置详解)
+- [如何挑选频道](#如何挑选频道)
+- [常见问题](#常见问题)
 
 ---
 
 ## 快速开始
 
-### 1. 获取 Telegram 凭证
+### 依赖
 
-1. 前往 [my.telegram.org/apps](https://my.telegram.org/apps) 获取 `api_id` 和 `api_hash`
-2. 私信 [@BotFather](https://t.me/BotFather) 创建机器人，获取 `bot_token`
-
-### 2. 安装 FFmpeg
-
-```bash
-# Debian / Ubuntu
-sudo apt update && sudo apt install ffmpeg
-
-# Termux
-pkg install ffmpeg
-```
-
-### 3. 安装依赖
-
-推荐 Python ≥ 3.11。
+| 环境 | 要求 |
+|------|------|
+| Python | ≥ 3.11 |
+| FFmpeg | 任意版本 |
+| Telegram 账号 | 需要 api_id + api_hash + bot_token(可选) |
 
 ```bash
+# 安装 FFmpeg（Debian/Ubuntu）
+sudo apt install ffmpeg
+
+# 安装 Python 依赖
 pip install -r requirements.txt
 ```
 
-| 包 | 用途 |
-|---|---|
-| pyrogram | Telegram MTProto 客户端 |
-| TgCrypto | 加解密加速 |
-| rapidfuzz | 模糊匹配 |
-| httpx | 异步 HTTP（Deezer API） |
-| aiosqlite | 异步 SQLite |
-| mutagen | 音频元数据读写 |
-| psutil | 系统资源监控 |
+### 获取 Telegram 凭证
 
-### 4. 配置
+1. 前往 [my.telegram.org/apps](https://my.telegram.org/apps) → 创建应用 → 拿到 **api_id** 和 **api_hash**
+2. 私信 [@BotFather](https://t.me/BotFather) → `/newbot` → 拿到 **bot_token**
 
-复制示例文件并根据自己的信息编辑：
+---
+
+## 第一步：配置 config.json
 
 ```bash
 cp config.example.json config.json
 ```
 
-`config.json` 结构：
+只需要改这 5 个字段：
+
+| 字段 | 你的值 |
+|------|--------|
+| `api_id` | 从 my.telegram.org 拿到的数字 ID |
+| `api_hash` | 对应的 hash 字符串 |
+| `bot_token` | @BotFather 给你的 bot token, 可不填 |
+| `author_list` | 要下载的歌手，例如 `["The Beatles"]` |
+| `target_channels` | 要从哪些频道搜，例如 `[-1002321822091]` |
+
+完整示例：
 
 ```json
 {
     "telegram": {
-        "api_id": "12345678",
-        "api_hash": "your_api_hash_here",
-        "bot_token": "your_bot_token",
+        "api_id": 12345678,
+        "api_hash": "abc123def456",
+        "bot_token": "12345678qwertyuioERTYU",
         "session_name": "my_session",
         "workers": 2,
-        "author_list": ["The Beatles"]
+        "author_list": ["The Beatles", "Pink Floyd", "Radiohead"]
     },
     "monitoring": {
-        "exclude": ["live", "现场", "remake", "remix"],
-        "target_channels": [-1001234567890]
+        "target_channels": [-1002321822091,                -1001563715651],
+        "exclude": ["live", "现场", "remake", "remix"]
     },
     "paths": {
         "temp": "temp",
@@ -160,81 +86,139 @@ cp config.example.json config.json
 }
 ```
 
-### 5. 运行
+> `workers` = 同时下载的并发数，建议 2–3，过高容易触发 Telegram 限流。
+
+### author_list 写法
+
+程序根据 `author_list` 从 Deezer 拉取专辑曲目列表，然后在频道里搜索匹配。
+
+```json
+"author_list": ["The Beatles"]
+```
+
+搜索全部专辑。也支持限定搜索范围：
+
+```json
+"author_list": ["The Beatles / Abbey Road"]
+```
+
+只搜索 Abbey Road 这一张专辑。
+
+```json
+"author_list": ["The Beatles / * / Come Together"]
+```
+
+在所有专辑中只搜索指定曲目。
+
+### 频道 ID 从哪里来
+
+`target_channels` 填的是 Telegram 频道 ID（负数格式，如 `-1002321822091`）。
+
+本项目已经收集了 40 个无损音乐频道，详见 [channels.md](channels.md)（含语种/格式/曲风/音频数），直接复制 ID 即可。
+
+---
+
+## 第二步：运行
 
 ```bash
 python main.py
 ```
 
-首次运行时 Pyrogram 会要求输入手机号和二次验证码；登录成功后生成 `.session` 文件，后续不再重复提示。
-首次运行且 `songs.db` 为空时，会自动通过 Deezer API 索引所有配置歌手的专辑曲目。
+**首次运行**会发生两件事：
+
+1. **Pyrogram 登录** — 终端会提示输入手机号和 Telegram 验证码（仅首次，后续自动登录）
+2. **Deezer 索引** — 自动查询 `author_list` 中歌手的录音室专辑曲目，缓存到 `songs.db`
+
+索引完成后，程序自动开始扫描 `target_channels` 中的频道，匹配歌曲、下载、转码、写入元数据。
+
+输出目录结构：
+
+```
+result/
+└── The Beatles/
+    ├── Abbey Road/
+    │   ├── 01 Come Together (Remastered 2009).flac
+    │   ├── 02 Something (Remastered 2009).flac
+    │   └── ...
+    ├── Revolver/
+    └── ...
+```
+
+### 重新运行
+
+第二次运行直接继续，不会重复下载已有文件。要清空重来：
+
+```bash
+rm -f songs.db data.db && rm -rf result temp
+```
+
+### 查看进度
+
+程序运行时日志输出到终端和 `bot_running.log`。另外 bot 会向你的 Telegram 发送上线通知，回复 `/status` 查看实时状态（下载量、错误数、运行时长）。
 
 ---
 
-## 配置说明
+## 配置详解
 
-### telegram
+### audio — 转码参数
 
-| 字段 | 说明 |
-|---|---|
-| `api_id` / `api_hash` | 从 my.telegram.org 获取 |
-| `bot_token` | 从 @BotFather 获取 |
-| `session_name` | Session 文件名（任意） |
-| `workers` | 下载并发数，建议 2–5 |
-| `author_list` | 要索引的歌手列表 |
+默认将原始文件（DSF/DFF/FLAC/WAV）统一转码为 FLAC（16-bit / 44100Hz）。
 
-### monitoring
+```json
+{
+    "sample_rate": 44100,
+    "bit_depth": "s16",
+    "format": "flac",
+    "codec": "flac"
+}
+```
 
-| 字段 | 说明 |
-|---|---|
-| `target_channels` | 要扫描的频道 ID 列表（负数） |
-| `exclude` | 文件名含这些关键词时跳过 |
+| 编码器 | 输出格式 | 用途 |
+|--------|---------|------|
+| `flac` | `.flac` | 默认，无损高压缩 |
+| `alac` | `.m4a` | Apple 设备 |
+| `pcm_s16le` | `.wav` | 16-bit PCM |
+| `pcm_s24le` | `.wav` | 24-bit PCM |
+| `aac` | `.m4a` | 有损压缩 |
 
-### paths
+### workers — 下载并发
 
-| 字段 | 说明 |
-|---|---|
-| `temp` | 下载临时目录（非目标格式先下载到此待转码） |
-| `result` | 最终归档目录 |
-| `log` | 日志文件名 |
+```json
+"workers": 2
+```
 
-### audio
+每个 worker 独立下载一首歌。值越大速度越快，但也越容易被 Telegram 限流。建议 2–3。
 
-| 字段 | 说明 |
-|---|---|
-| `sample_rate` | 输出采样率（如 44100, 88200） |
-| `bit_depth` | 输出位深：`s16`、`s24`、`s32` |
-| `format` | 输出文件扩展名（如 `flac`, `wav`） |
-| `codec` | FFmpeg 音频编码器（见下表） |
+### exclude — 文件名屏蔽
+
+```json
+"exclude": ["live", "现场", "remake", "remix"]
+```
+
+文件名包含这些词的音频会被搜索器跳过。
 
 ---
 
-## 如何添加频道
+## 如何挑选频道
 
-将频道加入 `config.json` 的 `target_channels` 后，bot 才会扫描该频道的消息并下载音频。
+### 从 channels.md 选（推荐）
 
-频道全览见 [channels.md](channels.md)，包含语种、格式、音频数等信息。
+[channels.md](channels.md) 列出了 40 个已扫描频道，包含语种、格式、曲风、音频数量。
 
-### 方式一：从 channels.md 选择（推荐）
+挑选逻辑：
+- 挑语种匹配的（EN 适合欧美歌手）
+- 挑音频数多的（内容更全）
+- 挑曲风匹配的（Rock / Pop 频道适合 The Beatles）
 
-1. 打开 [channels.md](channels.md) 挑选频道
-2. 复制对应的 `channel_id`（负数，如 `-1001511716181`）
-3. 填入 `config.json` 的 `target_channels` 数组：
+把选中的频道 ID 填入 `target_channels`：
 
 ```json
 "target_channels": [
-    -1001511716181,
-    -1001259286620
+    -1002321822091,
+    -1001563715651,
+    -1001356243397
 ]
 ```
-
-### 方式二：自己查找频道 ID
-
-Telegram 频道 ID 是负数格式（`-100xxxxxxxxxx`）。获取方式：
-
-1. **如果你已经在频道里** — 使用 [@username_to_id_bot](https://t.me/username_to_id_bot)，发送频道链接即可
-(channels.md)）
-2. **手动推算** — 公开频道链接 `t.me/xxx` → 用 bot 调用 `getChat("@xxx")` 返回的 `id` 字段
 
 ### 验证频道是否可达
 
@@ -247,83 +231,33 @@ from pyrogram import Client
 async def main():
     app = Client(cfg.bot_name, api_id=cfg.api_id, api_hash=cfg.api_hash)
     await app.start()
-    try:
-        chat = await app.get_chat(-1001511716181)
-        print(f'✅ {chat.title} — {chat.members_count} 成员')
-    except Exception as e:
-        print(f'❌ {e}')
+    chat = await app.get_chat(-1002321822091)
+    print(f'可达: {chat.title}')
     await app.stop()
 
 asyncio.run(main())
 "
 ```
 
-### 添加后的效果
+### 自己找频道
 
-- bot 启动后会扫描该频道的所有历史消息，匹配目标歌手的音频文件并下载
-- 新消息通过频道监控（`idle()`）实时捕获
-- 如果频道私密（`🔒 私密`），你的 userbot 账号必须先加入该频道才会被扫描
-
----
-
-## 转码器配置
-
-| 编码器 | 输出格式 | 特性 |
-|---|---|---|
-| `flac` | `.flac` | 无损，高压缩比，推荐 |
-| `alac` | `.m4a` | 无损，Apple 设备友好 |
-| `pcm_s16le` | `.wav` | 16-bit 未压缩 PCM |
-| `pcm_s24le` | `.wav` | 24-bit 未压缩 PCM |
-| `pcm_s32le` | `.wav` | 32-bit 未压缩 PCM |
-| `wavpack` | `.wv` | 无损 |
-| `aac` | `.m4a` | 有损 |
-
-> 若用 WAV 格式，确保 `bit_depth` 与编码器匹配（如 `s24` → `pcm_s24le`）。
+1. 在 Telegram 里搜索无损音乐频道（关键词：FLAC、Hi-Res、Lossless）
+2. 用 [@username_to_id_bot](https://t.me/username_to_id_bot) 获取频道 ID
+3. 填入 `target_channels`
+4. 如果频道是私密的，你的 userbot 账号必须先加入
 
 ---
 
-## 索引系统
+## 常见问题
 
-项目使用 **Deezer 公开 API + iTunes 纠正** 作为索引源，无需 API 密钥。
+| 问题 | 原因 | 解决 |
+|------|------|------|
+| `CHAT_ID_INVALID` | 频道 ID 填错或 bot 不在频道里 | 检查 `target_channels` |
+| 搜不到歌曲 | 频道里没有这个歌手的资源 | 换频道 / 检查 `author_list` 拼写 |
+| 全部报 FloodWait | 并发太高或请求太密集 | 降低 `workers`；等待限流解除后重试 |
+| 找不到某张专辑 | Deezer 未收录或索引时 API 超时 | 重新运行一次（索引已缓存到 songs.db） |
+| `TgCrypto` 编译失败 | Windows + Python 3.12+ | 降级到 Python 3.11 |
+| 结果目录空 | 还在搜索阶段或搜索未匹配 | 看终端日志是否在 `Probing channel...` |
+| 想重新搜 | 清空索引 | `rm -f songs.db data.db` |
 
-流程：`search artist` → `get albums`（过滤录音室专辑） → `get tracks`
-
-- 混合索引：Deezer 为主源，曲目含非拉丁字符时自动回退到 iTunes（同语种版本）
-- 中日韩 / 西里尔语系歌手直接使用 iTunes 对应地区店（TW/JP/RU）
-- 专辑自动去重（剥离 `(Remastered)` 等后缀）
-- 非录音室专辑（Live / Compilation / Anthology）自动过滤
-- 全异步并发
-- 结果缓存至 `songs.db`，后续运行零等待
-
----
-
-## 汇报机器人
-
-启动时 `ReportBot` 向用户发送上线通知，回复 `/status` 查看实时状态：
-
-- CPU / 内存占用
-- 程序运行时长
-- 下载器状态（激活/冷却）
-- 已下载数据量 & 文件数
-- 错误计数
-
----
-
-## 常见错误
-
-| 错误 | 原因 | 处理 |
-|---|---|---|
-| `TgCrypto` 编译失败 | Windows + Python 3.12/3.13 | 降级到 Python 3.11 |
-| `Bad Request: CHAT_ID_INVALID` | 频道 ID 错误或被封禁 | 检查 `target_channels` 配置 |
-| Deezer API 超时 | 网络/代理问题 | 内置 3 次重试 + 退避 |
-| 未找到录音室专辑 | 歌手不在 Deezer 数据库 | 检查歌手名拼写 |
-
----
-
-## 特别说明
-
-- 索引器支持拉丁、**中日韩**、**西里尔**三种语系的歌手名，自动选择正确的数据源地区。
-- 搜索匹配对不同语种使用不同策略：拉丁用 token 级交集，非拉丁用全串模糊匹配。
-- 本项目**不适合古典音乐** — 搜索算法以"歌手→专辑→曲目"上下文区间为基础，古典乐的多乐章结构和混乱命名会导致匹配失败。
-- 数据库文件 `songs.db` 和 `data.db` 存储所有状态，删除它们将丢失索引和进度。
-- 欢迎 Issue 和 PR。
+> 本项目**不适合古典音乐** — 搜索算法以"歌手→专辑→曲目"上下文区间为基础，古典乐的多乐章结构和混乱命名会导致匹配失败。
