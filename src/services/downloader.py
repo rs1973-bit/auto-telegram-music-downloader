@@ -28,6 +28,8 @@ class Downloader:
         self.sql = sql
         self.conv_queue = conv_queue
         self.song_semaphore = asyncio.Semaphore(cfg.workers)
+        self._consecutive_floods = 0
+        self._last_flood_time = 0.0
 
     # ------------------------------------------------------------------ #
     #  robust_download — 私有辅助方法
@@ -56,8 +58,9 @@ class Downloader:
 
     async def _stream(self, msg: Message, target_path: str, offset_bytes: int) -> None:
         """从 offset_bytes 处流式下载，写入文件尾部，响应全局暂停。"""
+        chunk_offset = offset_bytes // (1024 * 1024)
         with open(target_path, "ab") as f:
-            async for chunk in self.client.stream_media(msg, offset=offset_bytes):
+            async for chunk in self.client.stream_media(msg, offset=chunk_offset):
                 if not self.manager.can_runs.is_set():
                     raise InterruptedError("Global pause triggered")
                 f.write(chunk)
@@ -72,16 +75,48 @@ class Downloader:
         self.manager.report_size += final_size - pre_size
 
     async def _handle_flood_or_interrupt(self, e: Exception) -> None:
-        """处理 FloodWait / InterruptedError：加锁后统一触发全局暂停再恢复。"""
-        if self.manager.can_runs.is_set():
-            async with dc_auth_lock:
-                if self.manager.can_runs.is_set():
-                    wait_time = e.value if hasattr(e, 'value') else 60
-                    logger.error(f"Rate limited/paused, sleeping {wait_time}s")
-                    self.manager.can_runs.clear()
-                    self.manager.error_count += 1
-                    await asyncio.sleep(wait_time)
-                    self.manager.can_runs.set()
+        """处理 FloodWait：全局冻结所有 worker，指数退避。
+
+        第一个遇到 FloodWait 的 worker 会：
+          1. 清除 can_runs → 所有 worker 阻塞在 can_runs.wait()
+          2. 指数退避休眠（按 Telegram 返回的 wait_time × 退避系数）
+          3. 恢复 can_runs → 所有 worker 继续
+
+        后续同时撞上 FloodWait 的 worker 不做重复处理，
+        直接 fallthrough 到 can_runs.wait() 统一等待。
+        """
+        import time
+        if not self.manager.can_runs.is_set():
+            # 已经有 worker 在处理 FloodWait，直接等全局恢复
+            return
+
+        async with dc_auth_lock:
+            if not self.manager.can_runs.is_set():
+                return
+
+            raw_wait = e.value if hasattr(e, 'value') else 30
+            self._consecutive_floods += 1
+
+            # 指数退避: Telegram 返回的等待时间 × 1.5^(连续次数-1), 最少 30s, 最多 300s
+            factor = 1.5 ** (self._consecutive_floods - 1)
+            wait_time = max(30, min(300, raw_wait * factor))
+
+            self.manager.error_count += 1
+            self.manager.can_runs.clear()
+            self._last_flood_time = time.time()
+
+            logger.error(
+                f"FloodWait #{self._consecutive_floods}: "
+                f"raw={raw_wait}s → backoff={wait_time:.0f}s, "
+                f"freezing all workers"
+            )
+            await asyncio.sleep(wait_time)
+
+            # 退避时间够长 → 重置连续计数
+            if wait_time >= 120:
+                self._consecutive_floods = 0
+
+            self.manager.can_runs.set()
 
     async def _download_attempt(self, msg: Message, target_path: str, expected_size: int, file_name: str) -> tuple[Message, bool]:
         """单次下载尝试。返回 (msg, success)。"""
