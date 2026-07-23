@@ -116,6 +116,7 @@ class MusicIndexer:
         while url:
             data = await self._request(url)
             if not data:
+                logger.warning("Deezer albums pagination broke mid-way — some albums may be missing from index")
                 break
             for item in data.get("data", []):
                 if item.get("record_type") != "album":
@@ -136,6 +137,7 @@ class MusicIndexer:
         while url:
             resp = await MusicIndexer._request(url)
             if not resp:
+                logger.warning(f"  Deezer track fetch failed for album {album_id} — tracks may be incomplete")
                 break
             for item in resp.get("data", []):
                 t = item.get("title", "").strip()
@@ -245,6 +247,8 @@ class MusicIndexer:
                     logger.info(f"    {alb_name}: {len(matched)} tracks")
                 else:
                     logger.warning(f"    {alb_name}: no matching tracks")
+            else:
+                logger.warning(f"    {alb_name}: no tracks returned from Deezer (API error or rate limit)")
 
         return True
 
