@@ -103,6 +103,13 @@ class Search_in_TG:
         """
         for chat_id in self.channels:
             print(f"Probing channel {chat_id}...")
+            # 新 session 缺少 peer access_hash，search_messages 会报 PEER_ID_INVALID。
+            # get_chat 负责解析 peer 并写入 Pyrogram 内部缓存，后续 search 才能工作。
+            try:
+                await self.app.get_chat(chat_id)
+            except Exception as e:
+                print(f"  [Skip] Channel unreachable: {e}")
+                continue
             songs = await self.sql.get_songs_from_IDX(band, album)
             sorted_songs = sorted(songs)
             all_done = True
