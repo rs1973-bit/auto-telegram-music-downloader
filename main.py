@@ -1,10 +1,7 @@
 import asyncio
 import sys
-
-# Pyrogram's hardcoded MIN_CHANNEL_ID (-1002147483647) predates Telegram's
-# expansion of channel ID space. Modern channels can have IDs up to ~10 digits.
-# Without this patch, get_peer_type() raises ValueError for IDs like
-# -1003568115907, causing PEER_ID_INVALID on all API calls (search, get_chat, etc.)
+# pyrogram预设的最小channel_id是-1002147483647, 小于这个值的id会被认为是非法的，故
+# 在下文将下限设置得更低
 import pyrogram.utils
 pyrogram.utils.MIN_CHANNEL_ID = -1009999999999
 
