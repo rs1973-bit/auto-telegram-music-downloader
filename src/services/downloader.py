@@ -79,7 +79,7 @@ class Downloader:
 
         第一个遇到 FloodWait 的 worker 会：
           1. 清除 can_runs → 所有 worker 阻塞在 can_runs.wait()
-          2. 指数退避休眠（按 Telegram 返回的 wait_time × 退避系数）
+          2. 指数退避休眠（按 Telegram 返回的 wait_time * 退避系数）
           3. 恢复 can_runs → 所有 worker 继续
 
         后续同时撞上 FloodWait 的 worker 不做重复处理，
@@ -182,7 +182,11 @@ class Downloader:
         current_save_dir = cfg.temp_path if need_conv else final_album_dir
         os.makedirs(current_save_dir, exist_ok=True)
 
-        target_path = os.path.join(current_save_dir, file_obj.file_name)
+        # 用 SongTask 数据重命名：音轨号 + 标题
+        orig_ext = os.path.splitext(file_obj.file_name)[1] or ".flac"
+        safe_title = task.song.replace("/", "／").replace("\\", "∕")
+        new_name = f"{task.idx:02d} {safe_title}{orig_ext}"
+        target_path = os.path.join(current_save_dir, new_name)
         return final_album_dir, target_path, need_conv
 
     async def _ensure_downloaded(self, msg: Message, file_obj: Any, target_path: str, final_album_dir: str, need_conv: bool) -> bool:
@@ -193,14 +197,14 @@ class Downloader:
           - 无最终文件时回退到检查 temp
         """
         if need_conv:
-            name = os.path.splitext(file_obj.file_name)[0]
+            name = os.path.splitext(os.path.basename(target_path))[0]
             final_path = os.path.join(final_album_dir, f"{name}.{cfg.target_ext}")
             if os.path.exists(final_path):
-                logger.info(f"Skipping existing file: {file_obj.file_name}")
+                logger.info(f"Skipping existing file: {os.path.basename(target_path)}")
                 return True
 
         if os.path.exists(target_path) and os.path.getsize(target_path) == file_obj.file_size:
-            logger.info(f"Skipping existing file: {file_obj.file_name}")
+            logger.info(f"Skipping existing file: {os.path.basename(target_path)}")
             return True
         return await self.robust_download(msg, target_path, file_obj.file_size)
 
