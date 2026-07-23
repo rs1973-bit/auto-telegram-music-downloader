@@ -17,7 +17,8 @@
       "remix"
     ],
     "target_channels": [
-      -1001234567890
+      -1001234567890,
+      -1002321822091
     ],
     "allowed_extensions": [
       ".wav",

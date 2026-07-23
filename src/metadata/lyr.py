@@ -1,5 +1,6 @@
 import httpx
 import difflib
+import os
 from typing import Optional
 from pathlib import Path
 
@@ -64,6 +65,12 @@ class Get_lry:
         artist = song.band
         title = song.song
         album_name = song.album.name if song.album else ""
+
+        # ── 本地缓存检查 ────────────────────────────────────
+        cache_name = f"{artist} {album_name} {title}.lrc"
+        cache_path = str(LYR / cache_name)
+        if os.path.exists(cache_path):
+            return cache_path
 
         async with httpx.AsyncClient(headers=self.headers, timeout=10.0) as client:
             try:
