@@ -1,19 +1,19 @@
 # 频道总览
 
-共 40 个频道（8 个已有 + 32 个新发现）
+共 40 个频道。音频数量通过 `search_messages_count(filter=AUDIO)` 统计（2026-07），部分频道将 FLAC 作为 DOCUMENT 发布（标 †），实际音频数可能更高。
 
 ## 已有频道
 
-| 频道名 | channel_id | 语种(Top3) | 音频格式 | 曲种 | 音频数量 | 链接 |
+| 频道名 | channel_id | 语种(Top3) | 音频格式 | 曲种 | 音频数量(统计日期) | 链接 |
 |--------|-----------|-----------|---------|------|---------|------|
-| DSD/FLAC FAMILY 👀 | `-1003568115907` | EN | FLAC/DSF/M4A | 多曲风 | 366 | 🔒 私密 |
-| Rock Hi-Res (Remastered) | `-1002321822091` | EN | FLAC | Rock | 271 | [t.me/rockhiresremas](https://t.me/rockhiresremas) |
-| Music In DSD | `-1001684560515` | русский, EN | DSF/WAV | Classical, Metal | 317 | 🔒 私密 |
-| Rock Hi-Res (Chat Official) | `-1001467423728` | EN, русский | FLAC | Rock | 274 | [t.me/Rock_Hi_Res_Chat_Official](https://t.me/Rock_Hi_Res_Chat_Official) |
-| Музыкальный Чат | `-1001381358013` | русский, EN | FLAC | Electronic, Rock | 306 | [t.me/musicbox61](https://t.me/musicbox61) |
-| Hi-Res Music Channel █ | `-1001356243397` | русский, EN | FLAC | Rock, Pop | 353 | [t.me/HiResMusicChannel](https://t.me/HiResMusicChannel) |
-| Музыка Hi-Res FLAC / WAV | `-1001277825103` | EN, русский | FLAC | Metal, Electronic | 387 | [t.me/musicbox161](https://t.me/musicbox161) |
-| Music in DSD, WAVE | `-1001235568157` | русский | DSF/WAV/WV | Classical, Rock | 370 | [t.me/musicindsd](https://t.me/musicindsd) |
+| DSD/FLAC FAMILY 👀 | `-1003568115907` | EN | FLAC/DSF/M4A | 多曲风 | 86,037(2026-07) | 🔒 私密 |
+| Rock Hi-Res (Remastered) | `-1002321822091` | EN | FLAC | Rock | 2,322(2026-07) | [t.me/rockhiresremas](https://t.me/rockhiresremas) |
+| Music In DSD | `-1001684560515` | русский, EN | DSF/WAV | Classical, Metal | 24,480(2026-07) | 🔒 私密 |
+| Rock Hi-Res (Chat Official) | `-1001467423728` | EN, русский | FLAC | Rock | 14,856(2026-07) | [t.me/Rock_Hi_Res_Chat_Official](https://t.me/Rock_Hi_Res_Chat_Official) |
+| Музыкальный Чат | `-1001381358013` | русский, EN | FLAC | Electronic, Rock | 6,881(2026-07) | [t.me/musicbox61](https://t.me/musicbox61) |
+| Hi-Res Music Channel █ | `-1001356243397` | русский, EN | FLAC | Rock, Pop | 468(2026-07) | [t.me/HiResMusicChannel](https://t.me/HiResMusicChannel) |
+| Музыка Hi-Res FLAC / WAV | `-1001277825103` | EN, русский | FLAC | Metal, Electronic | 13,917(2026-07) | [t.me/musicbox161](https://t.me/musicbox161) |
+| Music in DSD, WAVE | `-1001235568157` | русский | DSF/WAV/WV | Classical, Rock | 26,383(2026-07) | [t.me/musicindsd](https://t.me/musicindsd) |
 
 ## 新发现频道
 
