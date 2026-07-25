@@ -54,30 +54,59 @@ class Search_in_TG:
         songs = await self.sql.get_songs_from_IDX(band, album)
         album_len = len(songs)
         original_idx = songs.index(song)
-        # ── 快路径：文本搜索 caption（作者+曲名，去掉括号后缀以适配频道元数据） ──
+
         query_song = re.sub(r"\s*[\(\[].*?[\)\]]", "", song).strip()
-        query = f"{band} {query_song}"
-        print(f"  [Search] {query}")
+        full_query = f"{band} {query_song}"
+
+        print(f"  [Search] {full_query}")
+        match = await self._try_search(chat_id, full_query, band, album, song, album_len, original_idx)
+        if match:
+            return match
+
+        # 快路径没结果 → 降级为只搜 band 名，
+        # 在文字公告附近找无 caption 的文件（如 Music In DSD 频道）
+        print(f"  [Search] fallback: just band '{band}'")
+        seen = set()
+        async for msg in self.app.search_messages(chat_id=chat_id, query=band, limit=30):
+            if msg.id in cfg.collected_ids or msg.id in seen:
+                continue
+            seen.add(msg.id)
+            file_obj = msg.document or msg.audio
+            if file_obj and file_obj.file_name:
+                # 直接匹配到文件
+                if is_song_match(song, file_obj.file_name):
+                    start = msg.id - original_idx
+                    end = msg.id + (album_len - original_idx)
+                    cfg.collected_ids.add(msg.id)
+                    return (chat_id, start, end)
+            elif (msg.text or msg.caption) and self._is_album_announcement(band, album, msg):
+                track = await self._find_nearby_file(chat_id, msg.id, band, album, song)
+                if track:
+                    start = track.id - original_idx
+                    end = track.id + (album_len - original_idx)
+                    cfg.collected_ids.add(track.id)
+                    return (chat_id, start, end)
+        return None
+
+    async def _try_search(
+        self, chat_id: int, query: str, band: str, album: str, song: str,
+        album_len: int, original_idx: int,
+    ) -> tuple[int, int, int] | None:
+        """用 query 搜索频道，尝试匹配文件或文字公告。"""
         async for message in self.app.search_messages(chat_id=chat_id, query=query, limit=30):
             if message.id in cfg.collected_ids:
                 continue
             file_obj = message.document or message.audio
             if file_obj and file_obj.file_name:
-                # 直接匹配到文件
                 if is_song_match(song, file_obj.file_name):
                     start = message.id - original_idx
                     end = message.id + (album_len - original_idx)
                     cfg.collected_ids.add(message.id)
                     return (chat_id, start, end)
             elif message.text or message.caption:
-                # 部分频道先发文字公告再发文件（文件无 caption），
-                # 搜索命中文字公告后从后续消息中找文件
                 if not self._is_album_announcement(band, album, message):
                     continue
-                # 在附近的消息中查找实际文件
-                track = await self._find_nearby_file(
-                    chat_id, message.id, band, album, song
-                )
+                track = await self._find_nearby_file(chat_id, message.id, band, album, song)
                 if track:
                     start = track.id - original_idx
                     end = track.id + (album_len - original_idx)
@@ -147,8 +176,6 @@ class Search_in_TG:
         """
         for chat_id in self.channels:
             print(f"Probing channel {chat_id}...")
-            # 新 session 缺少 peer access_hash，search_messages 会报 PEER_ID_INVALID。
-            # get_chat 负责解析 peer 并写入 Pyrogram 内部缓存，后续 search 才能工作。
             chat_info = await request_api(self.app.get_chat, 1, chat_id)
             if chat_info is None:
                 continue
