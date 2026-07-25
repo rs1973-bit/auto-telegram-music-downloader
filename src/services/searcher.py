@@ -62,13 +62,57 @@ class Search_in_TG:
             if message.id in cfg.collected_ids:
                 continue
             file_obj = message.document or message.audio
-            if not file_obj or not file_obj.file_name:
-                continue
-            if is_song_match(song, file_obj.file_name):
-                start = message.id - original_idx
-                end = message.id + (album_len - original_idx)
-                cfg.collected_ids.add(message.id)
-                return (chat_id, start, end)
+            if file_obj and file_obj.file_name:
+                # 直接匹配到文件
+                if is_song_match(song, file_obj.file_name):
+                    start = message.id - original_idx
+                    end = message.id + (album_len - original_idx)
+                    cfg.collected_ids.add(message.id)
+                    return (chat_id, start, end)
+            elif message.text or message.caption:
+                # 部分频道先发文字公告再发文件（文件无 caption），
+                # 搜索命中文字公告后从后续消息中找文件
+                if not self._is_album_announcement(band, album, message):
+                    continue
+                # 在附近的消息中查找实际文件
+                track = await self._find_nearby_file(
+                    chat_id, message.id, band, album, song
+                )
+                if track:
+                    start = track.id - original_idx
+                    end = track.id + (album_len - original_idx)
+                    cfg.collected_ids.add(track.id)
+                    return (chat_id, start, end)
+        return None
+
+    def _is_album_announcement(self, band: str, album: str, message: Message) -> bool:
+        """粗略判断消息是否可能是某专辑的文字公告。"""
+        text = (message.text or message.caption or "").lower()
+        band_low = band.lower()
+        # 只要文本中包含作者名即视为公告候选
+        return band_low in text
+
+    async def _find_nearby_file(
+        self, chat_id: int, anchor_id: int, band: str, album: str, song: str
+    ) -> Message | None:
+        """搜索聊天历史中新的消息找到匹配的文件。"""
+        songs = await self.sql.get_songs_from_IDX(band, album)
+        album_len = len(songs)
+        buffer = album_len * 5  # 缓冲区大小
+        try:
+            # get_chat_history 返回 offset 之前的消息（由新到旧）。
+            # anchor 是文字公告，其后的文件 ID 更大，
+            # 所以从 anchor + buffer 开始取，只保留 ID > anchor 的消息。
+            async for msg in self.app.get_chat_history(
+                chat_id, offset_id=anchor_id + buffer + 1, limit=buffer
+            ):
+                if msg.id <= anchor_id:
+                    break
+                f = msg.document or msg.audio
+                if f and f.file_name and is_song_match(song, f.file_name):
+                    return msg
+        except Exception:
+            pass
         return None
     async def submit_task(self, band: str, album: str, rate: float, chat_id: int, start: int, end: int) -> None:
         print(f"""  [Hit] {band} - {album} | hit rate: {rate:.2f} | ID: {start}-{end} CHAT_ID: {chat_id}""")
@@ -105,7 +149,7 @@ class Search_in_TG:
             print(f"Probing channel {chat_id}...")
             # 新 session 缺少 peer access_hash，search_messages 会报 PEER_ID_INVALID。
             # get_chat 负责解析 peer 并写入 Pyrogram 内部缓存，后续 search 才能工作。
-            chat_info = await request_api(self.app.get_chat, 2, chat_id)
+            chat_info = await request_api(self.app.get_chat, 1, chat_id)
             if chat_info is None:
                 continue
             songs = await self.sql.get_songs_from_IDX(band, album)
@@ -118,7 +162,7 @@ class Search_in_TG:
                         print(f"  [Skip] {band} - {album} - {song} already downloaded")
                         continue
                 all_done = False
-                id_range = await request_api(self.search_song_in_TG, 4, band, album, chat_id, song)
+                id_range = await request_api(self.search_song_in_TG, 2, band, album, chat_id, song)
                 if id_range:
                     chat_id, start, end = id_range
                     rate, details = await self.validate_album_status(band, album, chat_id, start, end)
