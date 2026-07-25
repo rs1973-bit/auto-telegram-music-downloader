@@ -166,7 +166,7 @@ class Search_in_TG:
         for t in pending_tasks:
             await self.queue.put(t)
     # ------------------------------------------------------------------ #
-    #  专辑搜索：单阶段逐首匹配
+    #  专辑搜索
     # ------------------------------------------------------------------ #
     async def search_album_in_TG(self, band: str, album: str) -> bool:
         """
@@ -180,6 +180,18 @@ class Search_in_TG:
             if chat_info is None:
                 continue
             songs = await self.sql.get_songs_from_IDX(band, album)
+            album_len = len(songs)
+
+            # ── 专辑级搜索：搜 "作者 专辑名" 找文字公告，命中后提取全部曲目 ──
+            album_range = await request_api(self._search_album_announcement, 2, chat_id, band, album, album_len)
+            if album_range:
+                start, end = album_range
+                rate, details = await self.validate_album_status(band, album, chat_id, start, end)
+                if rate >= 0.7:
+                    print(f"  [Verify] Album-level hit rate {rate}, details: {details}")
+                    await self.submit_task(band, album, rate, chat_id, start, end)
+                    return True
+
             sorted_songs = sorted(songs)
             all_done = True
             for song in sorted_songs:
@@ -201,6 +213,53 @@ class Search_in_TG:
                 print(f"  [Info] Album {band} - {album} fully downloaded, skipping.")
                 return True
         return False
+
+    async def _search_album_announcement(
+        self, chat_id: int, band: str, album: str, album_len: int
+    ) -> tuple[int, int] | None:
+        """搜作者+专辑名，找到文字公告后提取附近文件区间。"""
+        query = f"{band} {album}"
+        print(f"  [AlbumSearch] {query}")
+        async for msg in self.app.search_messages(chat_id=chat_id, query=query, limit=20):
+            if msg.id in cfg.collected_ids:
+                continue
+            text = (msg.text or msg.caption or "").lower()
+            if band.lower() not in text:
+                continue
+            tracks = await self._find_all_nearby_files(chat_id, msg.id, band, album, album_len)
+            if not tracks:
+                continue
+            first = min(t.id for t in tracks)
+            songs = await self.sql.get_songs_from_IDX(band, album)
+            first_song_idx = songs.index(sorted(songs)[0])
+            start = first - first_song_idx
+            end = start + album_len - 1
+            return (start, end)
+        return None
+
+    async def _find_all_nearby_files(
+        self, chat_id: int, anchor_id: int, band: str, album: str, album_len: int
+    ) -> list[Message]:
+        """从 anchor 附近收集匹配本专辑曲目的文件消息。"""
+        buffer = album_len * 5
+        hits: list[Message] = []
+        try:
+            async for msg in self.app.get_chat_history(
+                chat_id, offset_id=anchor_id + buffer + 1, limit=buffer
+            ):
+                if msg.id <= anchor_id:
+                    break
+                f = msg.document or msg.audio
+                if not f or not f.file_name:
+                    continue
+                songs = await self.sql.get_songs_from_IDX(band, album)
+                for song in songs:
+                    if is_song_match(song, f.file_name):
+                        hits.append(msg)
+                        break
+        except Exception:
+            pass
+        return hits
     async def GET_HISTORY_AUDIO(self) -> None:
         import time
         overall_start = time.time()
