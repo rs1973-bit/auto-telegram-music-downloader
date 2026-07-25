@@ -54,94 +54,21 @@ class Search_in_TG:
         songs = await self.sql.get_songs_from_IDX(band, album)
         album_len = len(songs)
         original_idx = songs.index(song)
-
+        # ── 快路径：文本搜索 caption（作者+曲名，去掉括号后缀以适配频道元数据） ──
         query_song = re.sub(r"\s*[\(\[].*?[\)\]]", "", song).strip()
-        full_query = f"{band} {query_song}"
-
-        print(f"  [Search] {full_query}")
-        match = await self._try_search(chat_id, full_query, band, album, song, album_len, original_idx)
-        if match:
-            return match
-
-        # 快路径没结果 → 降级为只搜 band 名，
-        # 在文字公告附近找无 caption 的文件（如 Music In DSD 频道）
-        print(f"  [Search] fallback: just band '{band}'")
-        seen = set()
-        async for msg in self.app.search_messages(chat_id=chat_id, query=band, limit=30):
-            if msg.id in cfg.collected_ids or msg.id in seen:
-                continue
-            seen.add(msg.id)
-            file_obj = msg.document or msg.audio
-            if file_obj and file_obj.file_name:
-                # 直接匹配到文件
-                if is_song_match(song, file_obj.file_name):
-                    start = msg.id - original_idx
-                    end = msg.id + (album_len - original_idx)
-                    cfg.collected_ids.add(msg.id)
-                    return (chat_id, start, end)
-            elif (msg.text or msg.caption) and self._is_album_announcement(band, album, msg):
-                track = await self._find_nearby_file(chat_id, msg.id, band, album, song)
-                if track:
-                    start = track.id - original_idx
-                    end = track.id + (album_len - original_idx)
-                    cfg.collected_ids.add(track.id)
-                    return (chat_id, start, end)
-        return None
-
-    async def _try_search(
-        self, chat_id: int, query: str, band: str, album: str, song: str,
-        album_len: int, original_idx: int,
-    ) -> tuple[int, int, int] | None:
-        """用 query 搜索频道，尝试匹配文件或文字公告。"""
+        query = f"{band} {query_song}"
+        print(f"  [Search] {query}")
         async for message in self.app.search_messages(chat_id=chat_id, query=query, limit=30):
             if message.id in cfg.collected_ids:
                 continue
             file_obj = message.document or message.audio
-            if file_obj and file_obj.file_name:
-                if is_song_match(song, file_obj.file_name):
-                    start = message.id - original_idx
-                    end = message.id + (album_len - original_idx)
-                    cfg.collected_ids.add(message.id)
-                    return (chat_id, start, end)
-            elif message.text or message.caption:
-                if not self._is_album_announcement(band, album, message):
-                    continue
-                track = await self._find_nearby_file(chat_id, message.id, band, album, song)
-                if track:
-                    start = track.id - original_idx
-                    end = track.id + (album_len - original_idx)
-                    cfg.collected_ids.add(track.id)
-                    return (chat_id, start, end)
-        return None
-
-    def _is_album_announcement(self, band: str, album: str, message: Message) -> bool:
-        """粗略判断消息是否可能是某专辑的文字公告。"""
-        text = (message.text or message.caption or "").lower()
-        band_low = band.lower()
-        # 只要文本中包含作者名即视为公告候选
-        return band_low in text
-
-    async def _find_nearby_file(
-        self, chat_id: int, anchor_id: int, band: str, album: str, song: str
-    ) -> Message | None:
-        """搜索聊天历史中新的消息找到匹配的文件。"""
-        songs = await self.sql.get_songs_from_IDX(band, album)
-        album_len = len(songs)
-        buffer = album_len * 5  # 缓冲区大小
-        try:
-            # get_chat_history 返回 offset 之前的消息（由新到旧）。
-            # anchor 是文字公告，其后的文件 ID 更大，
-            # 所以从 anchor + buffer 开始取，只保留 ID > anchor 的消息。
-            async for msg in self.app.get_chat_history(
-                chat_id, offset_id=anchor_id + buffer + 1, limit=buffer
-            ):
-                if msg.id <= anchor_id:
-                    break
-                f = msg.document or msg.audio
-                if f and f.file_name and is_song_match(song, f.file_name):
-                    return msg
-        except Exception:
-            pass
+            if not file_obj or not file_obj.file_name:
+                continue
+            if is_song_match(song, file_obj.file_name):
+                start = message.id - original_idx
+                end = message.id + (album_len - original_idx)
+                cfg.collected_ids.add(message.id)
+                return (chat_id, start, end)
         return None
     async def submit_task(self, band: str, album: str, rate: float, chat_id: int, start: int, end: int) -> None:
         print(f"""  [Hit] {band} - {album} | hit rate: {rate:.2f} | ID: {start}-{end} CHAT_ID: {chat_id}""")
@@ -166,7 +93,7 @@ class Search_in_TG:
         for t in pending_tasks:
             await self.queue.put(t)
     # ------------------------------------------------------------------ #
-    #  专辑搜索
+    #  专辑搜索：单阶段逐首匹配
     # ------------------------------------------------------------------ #
     async def search_album_in_TG(self, band: str, album: str) -> bool:
         """
