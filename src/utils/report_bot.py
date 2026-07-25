@@ -29,8 +29,8 @@ class ReportBot:
     def _setup_handlers(self) -> None:
         """注册 /status 指令处理器。"""
         async def handle_status(client: Client, message: object) -> None:
-            await self.report()
-
+            await self.report_status()
+        
         self.bot.add_handler(
             MessageHandler(handle_status, filters=filters.command("status"))
         )
@@ -39,7 +39,7 @@ class ReportBot:
     #  消息发送
     # ------------------------------------------------------------------ #
 
-    async def report(self) -> None:
+    async def report_status(self) -> None:
         """采集设备状态和下载统计并发给用户。"""
         cpu = psutil.cpu_percent(interval=0.5)
         mem = psutil.virtual_memory().percent

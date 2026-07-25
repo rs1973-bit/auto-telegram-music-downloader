@@ -2,8 +2,7 @@ import asyncio
 from collections.abc import Callable, Coroutine
 from typing import Any
 from pyrogram.errors import FloodWait
-
-
+    
 async def request_api(
     func: Callable[..., Any] | Callable[..., Coroutine[Any, Any, Any]],
     sleep_time: int,
