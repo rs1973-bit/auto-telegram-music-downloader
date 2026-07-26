@@ -11,10 +11,7 @@ async def request_api(
 ) -> Any:
     for i in range(5):
         try:
-            if asyncio.iscoroutinefunction(func):
-                result = await func(*args, **kwargs)  # type: ignore
-            else:
-                result = func(*args, **kwargs)
+            result = await func(*args, **kwargs)  # type: ignore
             await asyncio.sleep(sleep_time)
             return result
         except FloodWait as e:

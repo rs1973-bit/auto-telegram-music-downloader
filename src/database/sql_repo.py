@@ -143,6 +143,14 @@ class SQL_REPO(BaseMuiscRepo):
                 result.append(row[0])
             return result
             
+
+    async def get_track_num(self, band: str, album: str, song: str) -> int:
+        """从 INDEX 表获取某首歌的轨道号（1-based）。"""
+        try:
+            songs = await self.get_songs_from_IDX(band, album)
+            return songs.index(song) + 1
+        except ValueError:
+            return 0
     async def is_song_exists(self, band: str, album: str, song: str) -> bool:
         async with SQL_MANAGE(DATA_SQL_PATH) as cur:
             await cur.execute(f"""SELECT 1 FROM {DATA_SQL_NAME} WHERE 
@@ -181,3 +189,18 @@ class SQL_REPO(BaseMuiscRepo):
             async for row in cur:
                 result.append(row)
             return result
+
+    async def get_pending_tasks(self) -> list[SongTask]:
+        """返回已分配 chat_id/msg_id 但未下载（status = 0）的任务，用于重启时重入队列。"""
+        async with SQL_MANAGE(DATA_SQL_PATH) as cur:
+            await cur.execute("SELECT * FROM data WHERE status = 0 AND chat_id != -1 AND msg_id != 0")
+            tasks = []
+            async for row in cur:
+                band, album, song = row[1], row[2], row[3]
+                idx = await self.get_track_num(band, album, song)
+                tasks.append(SongTask(
+                    band=band, album=AlbumTask(name=album, band=band),
+                    song=song, chat_id=row[4], msg_id=row[5], status=row[6],
+                    idx=idx,
+                ))
+            return tasks

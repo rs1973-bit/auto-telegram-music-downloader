@@ -242,8 +242,6 @@ class Downloader:
             "msg_id": task.msg_id,
             "chat_id": task.chat_id,
         }
-        with open('failed_documents.jsonl', 'a', encoding='utf-8') as f:
-            f.write(json.dumps(error_data, ensure_ascii=False) + "\n")
 
     async def handle_song_task(self, task: SongTask) -> bool:
         """处理单首歌曲任务：下载、转换（如需）、并更新数据库状态。"""
@@ -290,6 +288,7 @@ class Downloader:
                 chat_id=task['chat_id'],
                 msg_id=start + idx,
                 status=0,
+                idx=idx + 1,
             )
             await self.queue.put(st)
 
@@ -323,10 +322,11 @@ class Downloader:
     #  process_failed — 私有辅助方法
     # ------------------------------------------------------------------ #
 
-    def _row_to_song_task(self, row: tuple) -> SongTask:
+    async def _row_to_song_task(self, row: tuple) -> SongTask:
         """将数据库行（idx, band, album, song, chat_id, msg_id, status）转为 SongTask。"""
         _, band, album_name, song, chat_id, msg_id, *_ = row
-        return SongTask(band=band, album=AlbumTask(name=album_name, band=band), song=song, chat_id=chat_id, msg_id=msg_id, status=0)
+        idx = await self.sql.get_track_num(band, album_name, song)
+        return SongTask(band=band, album=AlbumTask(name=album_name, band=band), song=song, chat_id=chat_id, msg_id=msg_id, status=0, idx=idx)
 
     async def process_failed(self) -> int:
         """
@@ -339,7 +339,7 @@ class Downloader:
             return 0
 
         for row in failed_rows:
-            st = self._row_to_song_task(row)
+            st = await self._row_to_song_task(row)
             await self.queue.put(st)
 
         logger.info(f"Re-queued {len(failed_rows)} failed tasks")
