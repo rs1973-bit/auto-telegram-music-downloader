@@ -1,8 +1,21 @@
+import os
 import re
 from rapidfuzz import fuzz
 from src.utils.config import cfg
 from src.utils.language import is_latin
 from pyrogram.types import Message
+
+AUDIO_EXTENSIONS = frozenset({
+    '.flac', '.wav', '.mp3', '.dsf', '.dff',
+    '.ogg', '.aac', '.m4a', '.wma', '.ape',
+    '.alac', '.opus', '.wv', '.aiff', '.aif',
+    '.mp4', '.mka', '.tta', '.m4b',
+})
+
+
+def is_audio_file(filename: str) -> bool:
+    _, ext = os.path.splitext(filename)
+    return ext.lower() in AUDIO_EXTENSIONS
 
 
 def clean_name(name: str) -> str:
@@ -89,18 +102,11 @@ def is_album_match(songs: list[str], msgs: list[Message]) -> float:
 
 async def evaluate_album_messages(songs:list[str], msgs:list[Message]) -> tuple[float, list[bool]]:
     """对传入的消息区间逐首比对，返回命中率和每首歌的命中布尔列表。"""
+    file_msgs = [(msg.document or msg.audio) for msg in msgs]
+    file_msgs = [f for f in file_msgs if f and f.file_name and is_audio_file(f.file_name)]
     hits = []
-    for idx, song in enumerate(songs):
-        try:
-            msg = msgs[idx]
-        except IndexError:
-            hits.append(False)
-            continue
-        m_file = msg.document or msg.audio
-        if not m_file:
-            hits.append(False)
-        else:
-            hits.append(is_song_match(song, m_file.file_name))
+    for song in songs:
+        hits.append(any(is_song_match(song, f.file_name) for f in file_msgs))
 
     hit_count = len([h for h in hits if h])
     rate = round(hit_count / len(songs), 2) if songs else 0.0

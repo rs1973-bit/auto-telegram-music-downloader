@@ -61,7 +61,7 @@ async def run_session():
 
     # ── 1. 搜索器（生产者） ──────────────────────────────────────── #
     searcher:Search_in_TG = Search_in_TG(app, manager, song_queue, sql)
-    search_task = asyncio.create_task(searcher.GET_HISTORY_AUDIO())
+    search_task = asyncio.create_task(searcher.run())
 
     # ── 2. 下载器（消费者） ──────────────────────────────────────── #
     dl = Downloader(app, manager, song_queue, sql, conv_queue=conv_queue)

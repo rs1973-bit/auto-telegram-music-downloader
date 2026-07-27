@@ -18,8 +18,8 @@ class INSERT_METADATA:
     async def _fetch(self) -> None:
         self.cover_path = await Get_Cover().get_cover(self.album)
         self.lry_path = await Get_lry().get_lyrics(self.song)
+        self.song, self.album = await Label().fill_all(self.song, self.album)
         
-
     async def insert(self) -> None:
         await self._fetch()
 
