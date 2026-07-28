@@ -5,12 +5,7 @@ from src.utils.config import cfg
 from src.utils.language import is_latin
 from pyrogram.types import Message
 
-AUDIO_EXTENSIONS = frozenset({
-    '.flac', '.wav', '.mp3', '.dsf', '.dff',
-    '.ogg', '.aac', '.m4a', '.wma', '.ape',
-    '.alac', '.opus', '.wv', '.aiff', '.aif',
-    '.mp4', '.mka', '.tta', '.m4b',
-})
+AUDIO_EXTENSIONS = cfg.allowed_extensions
 
 
 def is_audio_file(filename: str) -> bool:
@@ -29,7 +24,7 @@ def clean_name(name: str) -> str:
         name = re.sub(r'[\(\[\{][^()\[\]{}]*[\)\]\}]', '', name)
     name = re.sub(r'\d+\s?bit|\d+\s?khz|\d+k', '', name, flags=re.I)
     name = re.sub(r'^\d+[\.\s\-_]+', '', name)
-    name = re.sub(r"[_'\-\.\s]+", ' ', name)   # 统一分隔符（含引号/下划线/点）
+    name = re.sub(r"[_'\-\.\s,!?;:]+", ' ', name)   # 统一分隔符（含引号/下划线/点/逗号/叹号等）
     return name.strip()
 
 

@@ -46,13 +46,23 @@ class Downloader:
               aligned_bytes  — 对齐到 1MiB 边界的字节数，用作 stream_media offset
         """
         size = os.path.getsize(target_path) if os.path.exists(target_path) else 0
-        chunk_index = size // (1024 * 1024)
-        return size, chunk_index * (1024 * 1024)
+        aligned = (size // (1024 * 1024)) * (1024 * 1024)
+        return size, aligned
 
     @staticmethod
     def _truncate(path: str, to_bytes: int):
-        """如果文件超过 to_bytes 则截断（保留完整块，丢弃尾部脏数据）。"""
-        if to_bytes > 0 and os.path.getsize(path) > to_bytes:
+        """
+        将文件截断到 to_bytes（保留完整 1MiB 块，丢弃尾部脏数据）。
+
+        安全处理文件不存在、空文件、及不足 1MiB 的碎片等情况。
+        """
+        if not os.path.exists(path):
+            return
+        if to_bytes == 0:
+            # 不足 1 个完整块 → 清空重来
+            with open(path, "w+b") as f:
+                f.truncate(0)
+        elif os.path.getsize(path) > to_bytes:
             with open(path, "r+b") as f:
                 f.truncate(to_bytes)
 
@@ -135,8 +145,15 @@ class Downloader:
         return msg, True
 
     async def robust_download(self, msg: Message, target_path: str, expected_size: int) -> bool:
+        """鲁棒下载，带 FloodWait 感知。
+
+        FloodWait / InterruptedError 不计入重试次数（无限重试直到成功）；
+        其他错误最多重试 20 次。
+        """
         file_obj = msg.document or msg.audio
-        for attempt in range(20):
+        retries = 0
+        max_retries = 20
+        while retries < max_retries:
             await self.manager.can_runs.wait()
             try:
                 _, ok = await self._download_attempt(msg, target_path, expected_size, file_obj.file_name)
@@ -145,15 +162,19 @@ class Downloader:
 
             except (FloodWait, InterruptedError) as e:
                 await self._handle_flood_or_interrupt(e)
+                # FloodWait 不消耗重试次数，继续重试
+                continue
 
             except RPCError as e:
+                retries += 1
                 self.manager.error_count += 1
-                logger.error(f"RPC error [attempt {attempt}]: {getattr(e, 'NAME', '')} - {getattr(e, 'MESSAGE', e)}")
+                logger.error(f"RPC error [retry {retries}/{max_retries}]: {getattr(e, 'NAME', '')} - {getattr(e, 'MESSAGE', e)}")
                 await asyncio.sleep(random.uniform(5, 10))
 
             except Exception as e:
+                retries += 1
                 self.manager.error_count += 1
-                logger.error(f"Unexpected error [attempt {attempt}]: {type(e).__name__} - {e}")
+                logger.error(f"Unexpected error [retry {retries}/{max_retries}]: {type(e).__name__} - {e}")
                 await asyncio.sleep(random.uniform(5, 15))
         return False
 
