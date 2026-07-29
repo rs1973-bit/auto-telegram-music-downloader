@@ -5,7 +5,7 @@ from urllib.parse import quote
 import httpx
 from src.utils.config import cfg
 from src.utils.logger import logger
-from src.utils.language import has_cjk, has_cyrillic, is_latin, is_native_latin
+from src.utils.language import has_cjk, has_cyrillic, is_latin, is_native_latin, normalize_cjk
 from src.database.sql_repo import SQL_REPO
 
 
@@ -51,12 +51,12 @@ class MusicIndexer:
 
     # ── 专辑过滤（通用）─────────────────────────────────────
     _EXCLUDE_RE = re.compile(
-        r"(live|bbc|anthology|songtrack|naked|rooftop|instrumental|"
+        r"(live|bbc|anthology|antholog|songtrack|naked|rooftop|instrumental|"
         r"cover\b|hollywood|early tapes|past masters|box\s*set|collection|"
         r"bootleg|1962|1967|acoustic (guitar|covers?)|music box|piano|"
         r"^1$|^love$|soundtrack|documentary|"
-        r"single|ep\b|remixes|remix\b|mixes|"
-        r"albums$|singles$|hits$)",
+        r"single|ep\b|remixes?|mixes|"
+        r"albums$|singles$|hits$|greatest)",
         re.I,
     )
     _STRIP_RE = re.compile(
@@ -113,10 +113,12 @@ class MusicIndexer:
     async def _deezer_albums(self, artist_id: int) -> list[tuple[int, str]]:
         seen: dict[str, int] = {}
         url: Optional[str] = f"{DEEZER_BASE}/artist/{artist_id}/albums"
+        page = 0
         while url:
             data = await self._request(url)
             if not data:
-                logger.warning("Deezer albums pagination broke mid-way — some albums may be missing from index")
+                logger.warning(f"Deezer albums page {page+1} failed — skipping, continuing from next")
+                url = None  # 停掉当前分页链，但不完全放弃已拿到的
                 break
             for item in data.get("data", []):
                 if item.get("record_type") != "album":
@@ -128,6 +130,7 @@ class MusicIndexer:
                 if base not in seen:
                     seen[base] = item["id"]
             url = data.get("next")
+            page += 1
         return [(aid, base) for base, aid in seen.items()]
 
     @staticmethod
@@ -157,6 +160,12 @@ class MusicIndexer:
         return None, name
 
     async def _itunes_albums(self, artist_id: int) -> list[tuple[int, str]]:
+        """iTunes 专辑列表。
+
+        iTunes 没有 record_type，所有 collection 混在一起。
+        额外用 trackCount 做启发式过滤：≤3 首很可能是 single/EP，≥25 首多半是合辑。
+        纯靠 _EXCLUDE_RE 不够（Free As A Bird 就是反例）。
+        """
         seen: dict[str, int] = {}
         url = f"{ITUNES_BASE}/lookup?id={artist_id}&entity=album&country=US&limit=200"
         data = await self._request(url)
@@ -164,6 +173,9 @@ class MusicIndexer:
             return []
         for item in data.get("results", []):
             if item.get("wrapperType") != "collection":
+                continue
+            tc = item.get("trackCount", 0)
+            if tc <= 3 or tc >= 25:
                 continue
             name = item.get("collectionName", "")
             if not name or self._EXCLUDE_RE.search(name):
@@ -348,8 +360,18 @@ class MusicIndexer:
         if tasks:
             await asyncio.gather(*tasks)
         if self.result:
-            await self.sql.insert_for_GET_IDX(self.result)
-            logger.info(f"Indexing complete, wrote {len(self.result)} tracks")
+            # 非拉丁曲目繁简归一化（iTunes TW 繁体 → 简体）
+            normed = []
+            for band, album, song in self.result:
+                if has_cjk(song):
+                    song = normalize_cjk(song)
+                if has_cjk(band):
+                    band = normalize_cjk(band)
+                if has_cjk(album):
+                    album = normalize_cjk(album)
+                normed.append((band, album, song))
+            await self.sql.insert_for_GET_IDX(normed)
+            logger.info(f"Indexing complete, wrote {len(normed)} tracks")
         else:
             logger.warning("Index results empty, nothing written")
         self.done = True

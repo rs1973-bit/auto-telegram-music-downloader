@@ -124,7 +124,16 @@ class SQL_REPO(BaseMuiscRepo):
             async for row in cur:
                 result.append(row[0])
             return result
-        
+    
+    async def get_bands_from_IDX(self) -> list[str]:
+        """查询索引表中所有去重后的艺人名"""
+        async with SQL_MANAGE(IDX_SQL_PATH) as cur:
+            await cur.execute(f"SELECT DISTINCT band FROM {IDX_SQL_NAME} ORDER BY band")
+            result = []
+            async for row in cur:
+                result.append(row[0])
+            return result
+
     async def count_idx_songs(self) -> int:
         """返回索引 songs 表中的总行数"""
         async with SQL_MANAGE(IDX_SQL_PATH) as cur:
@@ -163,6 +172,15 @@ class SQL_REPO(BaseMuiscRepo):
                         WHERE band = ? AND album = ? AND song = ?""", (band, album, song))
             result = await cur.fetchone()
             return result[0] if result else None
+
+    async def get_statuses_in_album(self, band: str, album: str, songs: list[str]) -> dict[str, int]:
+        """批量查询一张专辑中多首歌的状态，返回 song → status 字典。"""
+        async with SQL_MANAGE(DATA_SQL_PATH) as cur:
+            placeholders = ",".join("?" * len(songs))
+            params = [band, album] + songs
+            await cur.execute(f"""SELECT song, status FROM {DATA_SQL_NAME}
+                        WHERE band = ? AND album = ? AND song IN ({placeholders})""", params)
+            return {row[0]: row[1] for row in await cur.fetchall()}
 
     async def get_album_range_from_DATA(self, band: str, album: str) -> tuple[int, int]:
         async with SQL_MANAGE(DATA_SQL_PATH) as cur:
