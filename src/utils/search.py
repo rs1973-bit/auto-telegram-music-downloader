@@ -2,7 +2,7 @@ import os
 import re
 from rapidfuzz import fuzz
 from src.utils.config import cfg
-from src.utils.language import is_latin
+from src.utils.language import is_latin, normalize_cjk, has_cjk
 from pyrogram.types import Message
 
 AUDIO_EXTENSIONS = cfg.allowed_extensions
@@ -14,17 +14,31 @@ def is_audio_file(filename: str) -> bool:
 
 
 def clean_name(name: str) -> str:
-    """清洗文件名"""
+    """清洗文件名。
+
+    只剥离已知的元数据后缀（remastered、deluxe edition、mono/stereo 等），
+    保留有含义的括号内容如 (Reprise)、(Single Version) ——
+    否则 Sgt. Pepper's (Reprise) 与 Sgt. Pepper's 无法区分。
+    """
     name = name.lower()
+    # 繁简归一化：iTunes TW 店铺返回繁体，CN 频道可能用简体
+    if has_cjk(name):
+        name = normalize_cjk(name)
     name = re.sub(r'\.(wav|flac|dsf|dff)$', '', name)
-    # 重复移除括号内容直到稳定（处理嵌套括号）
-    prev = None
-    while prev != name:
-        prev = name
-        name = re.sub(r'[\(\[\{][^()\[\]{}]*[\)\]\}]', '', name)
+    # 只剥离已知元数据括号，不碰有含义的括号内容
+    name = re.sub(
+        r'\s*[\(\[][^\)\]]*('
+        r'remaster(?:ed)?(?:\s*\d{4})?|'
+        r'deluxe|super deluxe|edition|anniversary|'
+        r'mono|stereo|'
+        r'explicit|bonus|bonus track|'
+        r'\d{4} remaster|\d{4} remix'
+        r')[^\)\]]*[\)\]]?\s*',
+        '', name, flags=re.I
+    )
     name = re.sub(r'\d+\s?bit|\d+\s?khz|\d+k', '', name, flags=re.I)
     name = re.sub(r'^\d+[\.\s\-_]+', '', name)
-    name = re.sub(r"[_'\-\.\s,!?;:]+", ' ', name)   # 统一分隔符（含引号/下划线/点/逗号/叹号等）
+    name = re.sub(r"[_'\-\.\s,!?;:]+", ' ', name)   # 统一分隔符
     return name.strip()
 
 

@@ -55,13 +55,42 @@ class Search_in_TG:
         return msgs
 
     async def _build_track_map(self, band: str, album: str, msgs: list[Message]) -> dict[str, int]:
-        """从一批消息中检出属于本专辑的音频文件，返回 song→msg_id 映射。"""
+        """从一批消息中检出属于本专辑的音频文件，返回 song→msg_id 映射。
+
+        采用"位置优先"策略：
+          1. 收集区间内所有音频文件
+          2. 如果恰好 album_len 个且每个都能匹配至少一首歌 → 按位置分配
+             否则回退到文件名匹配
+
+        这解决了 Sgt. Pepper's (Reprise) 这种两首歌名几乎一样、
+        模糊匹配无法可靠区分的问题——因为位置本身就是信号。
+        """
         songs = await self.sql.get_songs_from_IDX(band, album)
-        track_map: dict[str, int] = {}
+        album_len = len(songs)
+
+        # ── 收集区间内所有音频消息 ──
+        audio_msgs: list[Message] = []
         for msg in msgs:
             f = msg.document or msg.audio
-            if not f or not f.file_name or not is_audio_file(f.file_name):
-                continue
+            if f and f.file_name and is_audio_file(f.file_name):
+                audio_msgs.append(msg)
+
+        # ── 位置优先：恰好 album_len 个 → 按 msg_id 升序分配 ──
+        if len(audio_msgs) == album_len:
+            all_match = True
+            for msg in audio_msgs:
+                f = msg.document or msg.audio
+                if not any(is_song_match(s, f.file_name) for s in songs):
+                    all_match = False
+                    break
+            if all_match:
+                audio_msgs.sort(key=lambda m: m.id)  # 确保从小到大
+                return {songs[i]: audio_msgs[i].id for i in range(album_len)}
+
+        # ── 回退：文件名模糊匹配 ──
+        track_map: dict[str, int] = {}
+        for msg in audio_msgs:
+            f = msg.document or msg.audio
             for song in songs:
                 if is_song_match(song, f.file_name):
                     track_map[song] = msg.id
@@ -74,8 +103,31 @@ class Search_in_TG:
 
     @staticmethod
     def _make_query(band: str, album: str, song: str) -> str:
-        """构建 Telegram search_messages 查询串（去掉括号内的额外信息）。"""
-        cleaned = re.sub(r"\s*[\(\[].*?[\)\]]", "", song).strip()
+        """构建 Telegram search_messages 查询串。
+
+        只剥离元数据括号（Remastered、Deluxe 等），
+        保留有含义的括号如 (Reprise)，否则 Sgt. Pepper's (Reprise)
+        与 Sgt. Pepper's 在搜索层面无法区分。
+
+        非拉丁艺人（如周杰伦）会繁简归一化，确保 Telecom 搜索命中。
+        """
+        from src.utils.language import normalize_cjk, has_cjk
+        cleaned = re.sub(
+            r'\s*[\(\[][^\)\]]*('
+            r'remaster(?:ed)?(?:\s*\d{4})?|'
+            r'deluxe|super deluxe|edition|anniversary|'
+            r'mono|stereo|bonus|bonus track|'
+            r'\d{4} remaster|\d{4} remix'
+            r')[^\)\]]*[\)\]]?\s*',
+            '', song, flags=re.I
+        ).strip()
+        # 非拉丁搜索词繁简归一化（iTunes TW 繁体 → 简体）
+        if has_cjk(cleaned):
+            cleaned = normalize_cjk(cleaned)
+        if has_cjk(band):
+            band = normalize_cjk(band)
+        if has_cjk(album):
+            album = normalize_cjk(album)
         return f"{band} {cleaned}"
 
     async def _search_one_by_filter(
@@ -187,13 +239,12 @@ class Search_in_TG:
         track_map: dict[str, tuple[int, int]] = {}
         missing: set[str] = set(songs)
 
-        # 预先剔除已下载（status=1）的曲目，搜索阶段就不再碰它们
+        # 跳过已在 data 表中的曲目（无论 status=0/1/2/-1，都已有完整下载信息）
         statuses = await self.sql.get_statuses_in_album(band, album, songs)
-        for song, st in statuses.items():
-            if st == 1:
-                missing.discard(song)
+        for song in statuses:
+            missing.discard(song)
         if not missing:
-            logger.info(f"  [Skip] All songs already downloaded: {band} - {album}")
+            logger.info(f"  [Skip] All songs already in data: {band} - {album}")
             return True
 
         for chat_id in self.channels:

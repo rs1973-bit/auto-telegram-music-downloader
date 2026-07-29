@@ -97,17 +97,14 @@ class Downloader:
         """
         import time
         if not self.manager.can_runs.is_set():
-            # 已经有 worker 在处理 FloodWait，直接等全局恢复
             return
 
         async with dc_auth_lock:
             if not self.manager.can_runs.is_set():
                 return
 
-            raw_wait = e.value if hasattr(e, 'value') else 30
             self._consecutive_floods += 1
-
-            # 指数退避: Telegram 返回的等待时间 × 1.5^(连续次数-1), 最少 30s, 最多 300s
+            raw_wait = e.value if hasattr(e, 'value') else 30
             factor = 1.5 ** (self._consecutive_floods - 1)
             wait_time = max(30, min(300, raw_wait * factor))
 
@@ -122,7 +119,6 @@ class Downloader:
             )
             await asyncio.sleep(wait_time)
 
-            # 退避时间够长 → 重置连续计数
             if wait_time >= 120:
                 self._consecutive_floods = 0
 
@@ -147,11 +143,14 @@ class Downloader:
     async def robust_download(self, msg: Message, target_path: str, expected_size: int) -> bool:
         """鲁棒下载，带 FloodWait 感知。
 
-        FloodWait / InterruptedError 不计入重试次数（无限重试直到成功）；
+        FloodWait / InterruptedError 不计入重试次数；
         其他错误最多重试 20 次。
+        0 字节的不完整下载（可能是 AUTH_BYTES_INVALID 等永久错误）
+        连续 3 次即放弃，避免无谓重试。
         """
         file_obj = msg.document or msg.audio
         retries = 0
+        zero_byte_streak = 0
         max_retries = 20
         while retries < max_retries:
             await self.manager.can_runs.wait()
@@ -162,8 +161,26 @@ class Downloader:
 
             except (FloodWait, InterruptedError) as e:
                 await self._handle_flood_or_interrupt(e)
-                # FloodWait 不消耗重试次数，继续重试
                 continue
+
+            except RuntimeError as e:
+                msg_text = str(e)
+                if "不完整" in msg_text and msg_text.startswith("不完整: 0/"):
+                    # Pyrogram 吞掉的非 FloodWait 错误（如 AUTH_BYTES_INVALID），
+                    # 不会随着等待自行恢复 → 连续 3 次即放弃
+                    zero_byte_streak += 1
+                    if zero_byte_streak >= 3:
+                        logger.error(f"0-byte error persisted after {zero_byte_streak} attempts, giving up: {e}")
+                        self.manager.error_count += 1
+                        return False
+                    logger.error(f"0-byte download [streak={zero_byte_streak}]: {e}")
+                    await asyncio.sleep(random.uniform(5, 10))
+                    continue
+                # 部分下载（非 0 字节）→ 可能是网络中断，消耗重试继续
+                retries += 1
+                self.manager.error_count += 1
+                logger.error(f"Download incomplete [retry {retries}/{max_retries}]: {e}")
+                await asyncio.sleep(random.uniform(5, 15))
 
             except RPCError as e:
                 retries += 1

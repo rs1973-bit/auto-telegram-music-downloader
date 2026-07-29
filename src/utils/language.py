@@ -3,6 +3,7 @@
 供 index.py（数据源选择）、searcher.py（匹配策略分流）共用。"""
 
 import re
+from zhconv import convert as _zhconv_convert
 
 _CJK_RE = re.compile(r"[\u4e00-\u9fff\u3000-\u303f\u3040-\u309f\u30a0-\u30ff]")
 _CYRILLIC_RE = re.compile(r"[\u0400-\u04ff]")
@@ -39,3 +40,12 @@ def script_type(text: str) -> str:
     if has_cyrillic(text):
         return "cyrillic"
     return "latin"
+
+
+def normalize_cjk(text: str) -> str:
+    """将文本中的繁体中文（CJK 统一表意文字）归一化为简体。
+
+    iTunes TW 店铺返回的歌名是繁体中文，但 Telegram 频道里的
+    文件名可能是简体（CN）或繁体（TW/HK）。归一化后匹配不受影响。
+    """
+    return _zhconv_convert(text, "zh-cn")

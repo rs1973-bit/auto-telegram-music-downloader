@@ -189,9 +189,9 @@ class TestSearchAlbum:
 
     @pytest.mark.asyncio
     async def test_skips_downloaded(self, mock_app, revolver_msgs, mock_sql):
-        # 模拟所有曲目均已下载
+        # 模拟所有曲目已在 data 表中（status=0 也算，无需重新搜索）
         mock_sql.get_statuses_in_album = AsyncMock(
-            return_value={s: 1 for s in REVOLVER_SONGS}
+            return_value={s: 0 for s in REVOLVER_SONGS}
         )
         q = asyncio.Queue()
         cfg.targets = [-1001234567890]
@@ -201,7 +201,7 @@ class TestSearchAlbum:
         mgr.need_stop = MagicMock(return_value=False)
         s = Search_in_TG(mock_app, mgr, q, mock_sql)
         ok = await s._search_album("The Beatles", "Revolver")
-        assert ok  # 全已下载也算"搜索成功"
+        assert ok  # 全在 data 中算"搜索成功"
         assert q.empty()
 
     @pytest.mark.asyncio
